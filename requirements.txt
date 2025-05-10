@@ -1,0 +1,14 @@
+fastapi[standard]~=0.115.12
+uvicorn[standard]
+pydantic~=2.11.4
+python-jose[cryptography]~=3.4.0
+passlib[bcrypt]~=1.7.4
+python-multipart
+pydantic-settings~=2.9.1
+python-dotenv~=1.1.0
+jinja2
+starlette~=0.46.2
+sqlalchemy~=2.0.40
+alembic~=1.15.2
+psutil~=7.0.0
+Markdown~=3.8

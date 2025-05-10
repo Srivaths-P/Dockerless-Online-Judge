@@ -1,0 +1,10 @@
+{
+  "title": "Hello, World!",
+  "time_limit_sec": 1,
+  "memory_limit_mb": 32,
+  "allowed_languages": [
+    "python",
+    "c++",
+    "c"
+  ]
+}

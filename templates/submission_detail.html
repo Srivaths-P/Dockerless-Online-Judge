@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Submission {{ submission.id[:8] }}... - Online Judge{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="mb-0">Submission Details</h2>
+    <div>
+        <a class="btn btn-sm btn-outline-info me-2"
+           href="{{ url_for('ui_problem_detail', contest_id=submission.contest_id, problem_id=submission.problem_id) }}">
+            <i class="bi bi-file-earmark-text"></i> View Problem
+        </a>
+        <a class="btn btn-sm btn-outline-secondary"
+           href="{{ url_for('ui_contest_detail', contest_id=submission.contest_id) }}">
+            <i class="bi bi-collection"></i> View Contest
+        </a>
+    </div>
+</div>
+<p class="text-muted mb-4"><small>ID: {{ submission.id }}</small></p>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header">
+        Submission Overview
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p class="mb-2"><strong>Problem:</strong>
+                    <a href="{{ url_for('ui_problem_detail', contest_id=submission.contest_id, problem_id=submission.problem_id) }}">
+                        {{ submission.problem_id }}
+                    </a>
+                    (in <a href="{{ url_for('ui_contest_detail', contest_id=submission.contest_id) }}">{{
+                        submission.contest_id }}</a>)
+                </p>
+                <p class="mb-0"><strong>Language:</strong> <span class="badge bg-secondary">{{ submission.language|title if submission.language else 'N/A' }}</span>
+                </p>
+            </div>
+            <div class="col-md-6">
+                <p class="mb-2"><strong>Status:</strong> <span
+                        class="badge rounded-pill status-{{ submission.status.value }} px-2 py-1 fs-6">{{ submission.status.value|replace("_", " ")|title }}</span>
+                </p>
+                <p class="mb-0"><strong>Submitted At:</strong>
+                    <abbr title="{{ submission.submitted_at.isoformat() if submission.submitted_at else 'N/A' }}">
+                        {{ submission.submitted_at.strftime('%Y-%m-%d %H:%M:%S %Z') if submission.submitted_at else
+                        'N/A' }}
+                    </abbr>
+                </p>
+            </div>
+        </div>
+        {% if submission.status != 'ACCEPTED' and submission.status != 'PENDING' and submission.status != 'RUNNING' %}
+        <div class="mt-3 pt-3 border-top text-center">
+            <a class="btn btn-warning"
+               href="{{ url_for('ui_problem_detail', contest_id=submission.contest_id, problem_id=submission.problem_id) }}">
+                <i class="bi bi-arrow-clockwise"></i> Try Problem Again
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header">
+        Submitted Code
+    </div>
+    <div class="card-body p-0">
+        {# Replace '+' with 'p' for c++ for Prism language class if needed #}
+        <pre class="submission-code m-0"><code
+                class="language-{{ submission.language.lower().replace('+', 'p') if submission.language else 'clike' }}">{{ submission.code }}</code></pre>
+    </div>
+</div>
+
+<h3 class="mt-4 mb-3">Test Case Results</h3>
+{% if submission.results %}
+{% for result in submission.results %}
+<div class="card test-case-result status-{{ result.status.value }} mb-3 shadow-sm">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">Test Case: {{ result.test_case_name }}</h5>
+        <span class="badge rounded-pill status-{{ result.status.value }} px-2 py-1">{{ result.status.value|replace("_", " ")|title }}</span>
+    </div>
+    <div class="card-body">
+        {% if result.execution_time_ms is not none %}
+        <p class="mb-1"><small><strong>Time:</strong> {{ result.execution_time_ms }} ms</small></p>
+        {% endif %}
+        {% if result.memory_used_kb is not none %}
+        <p class="mb-1"><small><strong>Memory:</strong> {{ result.memory_used_kb }} KB</small></p>
+        {% endif %}
+
+        {% if result.stdout and result.status == 'WRONG_ANSWER' %}
+        <hr>
+        <p class="mb-1"><strong>Your Output:</strong></p>
+        <pre class="p-2 small"><code>{{ result.stdout }}</code></pre>
+        {% endif %}
+        {% if result.stderr %}
+        <hr>
+        <p class="mb-1"><strong>Error Output / Compiler Messages:</strong></p>
+        <pre class="p-2 small text-danger"><code class="language-clike">{{ result.stderr }}</code></pre>
+        {% endif %}
+        {% if not result.stdout and not result.stderr and result.status != 'ACCEPTED' and result.status != 'PENDING' and
+        result.status != 'RUNNING' and result.status != 'COMPILATION_ERROR' %}
+        <p class="text-muted fst-italic small mt-2">No standard output or standard error produced for this verdict.</p>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+{% elif submission.status == 'COMPILATION_ERROR' %}
+<div class="alert alert-danger d-flex align-items-center" role="alert">
+    <i class="bi bi-x-octagon-fill me-2 fs-4"></i>
+    <div>
+        <h4 class="alert-heading mb-1">Compilation Failed!</h4>
+        {% if submission.results and submission.results[0].stderr %}
+        <p class="mb-1">Compiler Output:</p>
+        <pre class="m-0"><code class="language-clike">{{ submission.results[0].stderr }}</code></pre>
+        {% else %}
+        <p class="mb-0">No specific compiler output available. Please check your code for syntax errors.</p>
+        {% endif %}
+    </div>
+</div>
+{% elif submission.status == 'PENDING' or submission.status == 'RUNNING' %}
+<div class="alert alert-info d-flex align-items-center" role="alert">
+    <div class="spinner-border spinner-border-sm me-2" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+    Processing submission... This page will refresh automatically.
+</div>
+{% else %}
+<div class="alert alert-secondary" role="alert">
+    No test case results available for this submission, or it's still processing.
+</div>
+{% endif %}
+
+<div class="mt-4">
+    <a class="btn btn-secondary" href="{{ url_for('ui_my_submissions') }}"><i class="bi bi-arrow-left"></i> Back to My
+        Submissions</a>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if submission.status == 'PENDING' or submission.status == 'RUNNING' %}
+<script>
+    setTimeout(function () {
+        window.location.reload();
+    }, 5000); // Refresh every 5 seconds
+</script>
+{% endif %}
+<script>
+    // Ensure Prism highlights static code blocks on page load
+    if (typeof Prism !== 'undefined') {
+        Prism.highlightAll();
+    }
+</script>
+{% endblock %}

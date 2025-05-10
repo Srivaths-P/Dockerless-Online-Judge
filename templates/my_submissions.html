@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}My Submissions - Online Judge{% endblock %}
+
+{% block content %}
+<h2 class="mb-4">My Submissions</h2>
+{% if submissions %}
+<div class="table-responsive shadow-sm">
+    <table class="table table-hover align-middle">
+        <thead class="table-light">
+        <tr>
+            <th scope="col">#</th>
+            <th scope="col">Submission ID</th>
+            <th scope="col">Contest / Problem</th>
+            <th scope="col">Language</th>
+            <th scope="col">Status</th>
+            <th scope="col">Submitted At</th>
+            <th scope="col">Details</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for sub in submissions %}
+        <tr>
+            <th scope="row">{{ loop.index }}</th>
+            <td><a href="{{ url_for('ui_submission_detail', submission_id=sub.id) }}"><small>{{ sub.id[:12]
+                }}...</small></a></td>
+            <td>
+                <a class="fw-medium"
+                   href="{{ url_for('ui_problem_detail', contest_id=sub.contest_id, problem_id=sub.problem_id) }}">{{ sub.problem_id }}</a>
+                <br>
+                <small class="text-muted">
+                    in <a href="{{ url_for('ui_contest_detail', contest_id=sub.contest_id) }}">{{ sub.contest_id }}</a>
+                </small>
+            </td>
+            <td><span class="badge bg-secondary">{{ sub.language|title if sub.language else 'N/A' }}</span></td>
+            <td>
+                {# Use the status- class directly on the badge #}
+                <span class="badge rounded-pill status-{{ sub.status.value }} px-2 py-1">{{ sub.status.value|replace("_", " ")|title }}</span>
+            </td>
+            <td>
+                <abbr title="{{ sub.submitted_at.isoformat() if sub.submitted_at else 'N/A' }}">
+                    <small>{{ sub.submitted_at.strftime('%Y-%m-%d %H:%M') if sub.submitted_at else 'N/A' }}</small>
+                </abbr>
+            </td>
+            <td>
+                <a class="btn btn-sm btn-outline-primary"
+                   href="{{ url_for('ui_submission_detail', submission_id=sub.id) }}">
+                    <i class="bi bi-eye"></i> View
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center p-5">
+    <i class="bi bi-journal-richtext fs-1 text-muted mb-3"></i>
+    <h4 class="text-muted">No Submissions Yet!</h4>
+    <p class="text-muted">You haven't made any submissions. Why not try solving a problem from one of the <a
+            class="alert-link" href="{{ url_for('ui_list_contests') }}">available contests</a>?</p>
+</div>
+{% endif %}
+{% endblock %}

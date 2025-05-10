@@ -1,0 +1,29 @@
+body {
+    padding-top: 56px;
+}
+
+main.container {
+    margin-top: 20px;
+    margin-bottom: 60px;
+}
+
+pre, .submission-code code {
+    font-size: 0.9em;
+    border-radius: 0.3rem;
+    tab-size: 4;
+}
+
+.test-case-result {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border-radius: 0.3rem;
+}
+
+.test-case-result h4 {
+    margin-top: 0;
+    font-size: 1.1rem;
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
