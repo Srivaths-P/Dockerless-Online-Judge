@@ -6,7 +6,7 @@
 <div class="problem-view-container">
     <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
         <h2 class="mb-0">{{ problem.title }}</h2>
-        <a href="{{ url_for('ui_contest_detail', contest_id=contest_id) }}" class="btn btn-sm btn-outline-secondary">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('ui_contest_detail', contest_id=contest_id) }}">
             <i class="bi bi-collection"></i> Back to Contest: {{ contest_id|title }}
         </a>
     </div>
@@ -21,14 +21,14 @@
             </div>
             <p><strong>Allowed Languages:</strong>
                 {% for lang in problem.allowed_languages %}
-                    <span class="badge bg-info text-dark me-1">{{ lang|title }}</span>
+                <span class="badge bg-info text-dark me-1">{{ lang|title }}</span>
                 {% endfor %}
             </p>
             <hr>
             {% if problem.description_md %}
-                {{ problem.description_md | markdown | safe }}
+            {{ problem.description_md | markdown | safe }}
             {% else %}
-                <p class="text-muted">No detailed problem description available.</p>
+            <p class="text-muted">No detailed problem description available.</p>
             {% endif %}
         </div>
     </div>
@@ -37,26 +37,30 @@
     <div class="card shadow-sm mb-4"> {# Added mb-4 for spacing below #}
         <div class="card-header"><h5 class="mb-0">Submit Solution</h5></div>
         <div class="card-body">
-            <form method="post" action="{{ url_for('ui_handle_submission', contest_id=contest_id, problem_id=problem.id) }}" id="submissionForm">
+            <form action="{{ url_for('ui_handle_submission', contest_id=contest_id, problem_id=problem.id) }}"
+                  id="submissionForm"
+                  method="post">
                 <div class="mb-3">
-                    <label for="languageSelect" class="form-label">Language:</label>
+                    <label class="form-label" for="languageSelect">Language:</label>
                     <select class="form-select form-select-lg" id="languageSelect" name="language">
                         {% for lang in problem.allowed_languages %}
-                        <option value="{{ lang }}"
-                                data-codemirror-mode="{% set lower_lang = lang.lower() %}{% if lower_lang == 'python' %}python{% elif lower_lang == 'c++' %}text/x-c++src{% elif lower_lang == 'c' %}text/x-csrc{% else %}clike{% endif %}"
-                                {% if loop.first %}selected{% endif %}>
+                        <option %}
+                                %}selected{%
+                                data-codemirror-mode="{% set lower_lang = lang.lower() %}{% if lower_lang == 'python' %}python{% elif lower_lang == 'c++' %}text/x-c++src{% elif lower_lang == 'c' %}text/x-csrc{% else %}clike{% endif %}" endif if loop.first value="{{ lang }}" {%>
                             {{ lang|title }}
                         </option>
                         {% endfor %}
                     </select>
                 </div>
                 <div class="mb-3">
-                    <label for="code" class="form-label">Code:</label>
-                    <textarea class="form-control" id="codeTextarea" name="code" rows="18" required></textarea>
+                    <label class="form-label" for="code">Code:</label>
+                    <textarea class="form-control" id="codeTextarea" name="code" required rows="18"></textarea>
                     {# CodeMirror will replace this #}
                 </div>
                 <div class="d-grid">
-                    <button type="submit" class="btn btn-primary btn-lg"><i class="bi bi-cloud-upload"></i> Submit Solution</button>
+                    <button class="btn btn-primary btn-lg" type="submit"><i class="bi bi-cloud-upload"></i> Submit
+                        Solution
+                    </button>
                 </div>
             </form>
         </div>
@@ -86,7 +90,9 @@
         }
 
         function initializeEditor(mode) {
-            if (editor) { editor.toTextArea(); } // Clean up old editor if exists
+            if (editor) {
+                editor.toTextArea();
+            } // Clean up old editor if exists
             editor = CodeMirror.fromTextArea(codeTextarea, {
                 lineNumbers: true,
                 mode: mode,
@@ -99,22 +105,26 @@
                 tabSize: 4,
                 indentWithTabs: false,
                 extraKeys: {
-                    "F11": function(cm) { cm.setOption("fullScreen", !cm.getOption("fullScreen")); },
-                    "Esc": function(cm) { if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false); }
+                    "F11": function (cm) {
+                        cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+                    },
+                    "Esc": function (cm) {
+                        if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
+                    }
                 }
             });
             // Update original textarea on CodeMirror change for form submission
-            editor.on('change', function(instance) {
-                 codeTextarea.value = instance.getValue();
+            editor.on('change', function (instance) {
+                codeTextarea.value = instance.getValue();
             });
             // Also update on blur to be safe
-             editor.on('blur', function(instance) {
-                 codeTextarea.value = instance.getValue();
-             });
+            editor.on('blur', function (instance) {
+                codeTextarea.value = instance.getValue();
+            });
 
             // Load initial content from textarea (if any, e.g., browser back button)
-            if(codeTextarea.value) {
-                 editor.setValue(codeTextarea.value);
+            if (codeTextarea.value) {
+                editor.setValue(codeTextarea.value);
             }
         }
 
@@ -124,18 +134,18 @@
 
             languageSelect.addEventListener('change', function () {
                 const selectedMode = getCodeMirrorMode(this.value);
-                 if (editor) {
+                if (editor) {
                     editor.setOption("mode", selectedMode);
-                 } else {
+                } else {
                     initializeEditor(selectedMode); // Fallback initialization
-                 }
+                }
             });
 
             // Ensure CodeMirror's content is copied to the hidden textarea just before form submission
             if (submissionForm) { // Check if form exists
-                submissionForm.addEventListener('submit', function() {
+                submissionForm.addEventListener('submit', function () {
                     if (editor) { // Check if editor exists
-                       codeTextarea.value = editor.getValue();
+                        codeTextarea.value = editor.getValue();
                     }
                 });
             }

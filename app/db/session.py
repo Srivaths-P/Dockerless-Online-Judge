@@ -1,22 +1,20 @@
-# In app/db/session.py
+from typing import Generator
+
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 
 from app.core.config import settings
 
-# --- FIX: Configure connection pool parameters ---
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=10,
-    pool_timeout=30
+    connect_args={"check_same_thread": False}
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-def get_db():
+def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db

@@ -26,7 +26,8 @@
                 }}...</small></a></td>
             <td>
                 <a class="fw-medium"
-                   href="{{ url_for('ui_problem_detail', contest_id=sub.contest_id, problem_id=sub.problem_id) }}">{{ sub.problem_id }}</a>
+                   href="{{ url_for('ui_problem_detail', contest_id=sub.contest_id, problem_id=sub.problem_id) }}">{{
+                    sub.problem_id }}</a>
                 <br>
                 <small class="text-muted">
                     in <a href="{{ url_for('ui_contest_detail', contest_id=sub.contest_id) }}">{{ sub.contest_id }}</a>
