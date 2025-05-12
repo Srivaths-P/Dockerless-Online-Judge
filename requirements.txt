@@ -12,3 +12,4 @@ sqlalchemy~=2.0.40
 alembic~=1.15.2
 psutil~=7.0.0
 Markdown~=3.8
+locust~=2.37.1

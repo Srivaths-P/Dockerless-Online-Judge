@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request, Depends, Form, BackgroundTasks, HTTPExce
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_303_SEE_OTHER
+from starlette import status as HTTP_STATUS
 
 from app.db import models as db_models
 from app.db.session import get_db
@@ -16,31 +17,48 @@ router = APIRouter()
 
 @router.post("/contests/{contest_id}/problems/{problem_id}", name="ui_handle_submission")
 async def handle_submission(
-        request: Request, contest_id: str, problem_id: str,
-        background_tasks: BackgroundTasks, db: Session = Depends(get_db),
-        language: str = Form(...), code: str = Form(...),
+        request: Request,
+        contest_id: str,
+        problem_id: str,
+        # background_tasks: BackgroundTasks, # <- Remove this line if not used for anything else
+        db: Session = Depends(get_db),
+        language: str = Form(...),
+        code: str = Form(...),
         current_user: Optional[db_models.User] = Depends(get_current_user_from_cookie)
 ):
     if not current_user:
         flash(request, "Please login to submit.", "warning")
-        return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
+        # Use status constants for clarity
+        return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_STATUS.HTTP_303_SEE_OTHER)
 
     submission_data = SubmissionCreate(
         problem_id=problem_id, contest_id=contest_id, language=language, code=code
     )
     try:
+        # --- FIX: Remove background_tasks argument ---
         submission_info = await submission_service.create_submission(
-            db=db, submission_data=submission_data,
-            current_user=current_user, background_tasks=background_tasks
+            db=db,
+            submission_data=submission_data,
+            current_user=current_user
+            # No background_tasks=background_tasks here anymore
         )
-        flash(request, f"Submission {submission_info.id} received!", "success")
+        # --- End of FIX ---
+
+        flash(request, f"Submission {submission_info.id[:8]} received! Processing in background.", "success") # Maybe adjust flash msg
         return RedirectResponse(url=request.url_for("ui_submission_detail", submission_id=submission_info.id),
-                                status_code=HTTP_303_SEE_OTHER)
-    except ValueError as e:
+                                status_code=HTTP_STATUS.HTTP_303_SEE_OTHER)
+    except ValueError as e: # Catch more specific exceptions if possible (like HTTPException from service)
         flash(request, f"Submission error: {str(e)}", "danger")
         return RedirectResponse(url=request.url_for("ui_problem_detail", contest_id=contest_id, problem_id=problem_id),
-                                status_code=HTTP_303_SEE_OTHER)
-
+                                status_code=HTTP_STATUS.HTTP_303_SEE_OTHER)
+    except Exception as e: # Catch potential unexpected errors during submission creation
+        flash(request, f"An unexpected error occurred during submission: {str(e)}", "danger")
+        # Log the error for debugging
+        print(f"ERROR during submission creation: {e}")
+        import traceback
+        traceback.print_exc()
+        return RedirectResponse(url=request.url_for("ui_problem_detail", contest_id=contest_id, problem_id=problem_id),
+                                status_code=HTTP_STATUS.HTTP_303_SEE_OTHER)
 
 @router.get("/{submission_id}", response_class=HTMLResponse, name="ui_submission_detail")
 async def submission_detail(
@@ -52,7 +70,7 @@ async def submission_detail(
         flash(request, "Please login to view submission details.", "warning")
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
 
-    submission_pydantic = submission_service.get_submission_by_id(db, submission_id, current_user)
+    submission_pydantic = submission_service.get_submission_by_id(db=db, submission_id=submission_id, current_user=current_user)
     if not submission_pydantic:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Submission not found or not authorized")
 

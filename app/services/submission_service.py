@@ -1,184 +1,206 @@
+# In app/services/submission_service.py
+import asyncio
 import json
-import uuid
-from typing import Optional, List
+import uuid  # Import uuid
+from typing import List # Ensure List is imported
 
-from fastapi import BackgroundTasks
+from fastapi import HTTPException, Depends # Import Depends
 from sqlalchemy.orm import Session
 
-from app.core.config import settings as app_settings
+# Adjust these imports based on your project structure
 from app.crud import crud_submission
 from app.db import models as db_models
-from app.sandbox.executor import run_code_in_sandbox
+from app.db.session import get_db # Assuming get_db dependency provider
+# Import the globally instantiated queue
+from app.sandbox.executor import submission_processing_queue
 from app.schemas.submission import (
     SubmissionCreate, SubmissionStatus, SubmissionInfo, TestCaseResult,
-    Submission as SubmissionSchema
+    Submission as SubmissionSchema # Alias to avoid naming conflict
 )
 from app.services.contest_service import get_problem_by_id
 
 
-async def process_submission_async(submission_id: str, db_url: str):
-    from app.db.session import SessionLocal
-
-    db_async: Session = SessionLocal()
-    try:
-        submission_db = crud_submission.submission.get(db_async, id_=submission_id)
-        if not submission_db:
-            print(f"Error: Submission {submission_id} not found for async processing.")
-            return
-
-        submission_db.status = SubmissionStatus.RUNNING.value
-        db_async.commit()
-
-        problem = get_problem_by_id(submission_db.contest_id, submission_db.problem_id)
-        if not problem:
-            submission_db.status = SubmissionStatus.INTERNAL_ERROR.value
-            error_result = TestCaseResult(test_case_name="Setup", status=SubmissionStatus.INTERNAL_ERROR,
-                                          stderr="Problem definition not found")
-            submission_db.results_json = json.dumps([error_result.model_dump()])
-            db_async.commit()
-            print(f"Submission {submission_id}: Problem definition not found.")
-            return
-
-        final_results_pydantic: List[TestCaseResult] = []
-        overall_status = SubmissionStatus.ACCEPTED
-
-        for tc_index, tc_schema in enumerate(problem.test_cases):
-            try:
-                tc_result_pydantic = await run_code_in_sandbox(
-                    submission_id=uuid.UUID(submission_db.id),
-                    code=submission_db.code,
-                    problem=problem,
-                    test_case=tc_schema,
-                    language=submission_db.language
-                )
-                final_results_pydantic.append(tc_result_pydantic)
-
-                if tc_result_pydantic.status != SubmissionStatus.ACCEPTED:
-                    overall_status = tc_result_pydantic.status
-                    if tc_result_pydantic.status == SubmissionStatus.COMPILATION_ERROR:
-                        break
-                    break
-            except Exception as e:
-                error_tc_result = TestCaseResult(
-                    test_case_name=tc_schema.name, status=SubmissionStatus.INTERNAL_ERROR,
-                    stderr=f"Error during test case execution setup: {str(e)}"
-                )
-                final_results_pydantic.append(error_tc_result)
-                overall_status = SubmissionStatus.INTERNAL_ERROR
-                break
-
-        crud_submission.submission.update_submission_results(
-            db_async,
-            db_obj=submission_db,
-            status=overall_status.value,
-            results=final_results_pydantic
-        )
-    except Exception as e_outer:
-        print(f"Outer error in process_submission_async for {submission_id}: {e_outer}")
-        submission_db_final_error = crud_submission.submission.get(db_async, id_=submission_id)
-        if submission_db_final_error:
-            submission_db_final_error.status = SubmissionStatus.INTERNAL_ERROR.value
-            error_result = TestCaseResult(test_case_name="Processing", status=SubmissionStatus.INTERNAL_ERROR,
-                                          stderr=f"Overall processing error: {str(e_outer)}")
-            submission_db_final_error.results_json = json.dumps([error_result.model_dump()])
-            db_async.commit()
-    finally:
-        db_async.close()
+# Placeholder for getting the current user - replace with your actual dependency
+# This dependency should be defined where your API/UI routes are, not necessarily here
+# But keeping it here for the service function signature compatibility
+async def get_current_active_user(db: Session = Depends(get_db)) -> db_models.User:
+    # Replace with your actual user fetching logic based on token/session
+    # This dummy implementation is just for type hinting and example
+    user = db.query(db_models.User).filter(db_models.User.email == "asd@asd.com").first() # Example fetch
+    if not user:
+        # In a real app, you'd raise an authentication exception
+        # print("Warning: get_current_active_user dummy function failed to find user 'asd@asd.com'")
+        # As this is a placeholder, let's allow it to return None or raise a specific auth error
+        # Assuming it *must* return a user for this service function to be called,
+        # the authentication should happen *before* calling the service.
+        # If called via a route dependency, the dependency handles the HTTPException.
+        # If calling service directly, handle the None case or ensure user exists.
+        # Raising HTTPException here aligns with FastAPI dependency pattern.
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
 
 
 async def create_submission(
-        db: Session,
+        db: Session, # Use Depends here as this is the service entry point from a route
         submission_data: SubmissionCreate,
-        current_user: db_models.User,
-        background_tasks: BackgroundTasks
+        current_user: db_models.User = Depends(get_current_active_user) # Use Depends here
 ) -> SubmissionInfo:
+    """
+    Creates a new submission record, enqueues it for processing,
+    and returns immediately.
+    """
+    print(f"Service: create_submission called by user {current_user.email} for problem {submission_data.problem_id}")
+
+    # 1. Validate problem and language
     problem = get_problem_by_id(submission_data.contest_id, submission_data.problem_id)
     if not problem:
-        raise ValueError("Problem not found")
+        print(f"Service: Problem not found: {submission_data.contest_id}/{submission_data.problem_id}")
+        raise HTTPException(status_code=404, detail="Problem not found")
     if submission_data.language not in problem.allowed_languages:
-        raise ValueError(f"Language {submission_data.language} not allowed for this problem.")
+        print(f"Service: Language '{submission_data.language}' not allowed for problem {problem.id}")
+        raise HTTPException(status_code=400,
+                            detail=f"Language {submission_data.language} not allowed for this problem.")
 
-    db_submission = crud_submission.submission.create_with_owner(
-        db, obj_in=submission_data, submitter_id=current_user.id
-    )
+    # 2. Persist initial submission record using CRUD
+    # The CRUD method now handles the commit internally
+    try:
+        print(f"Service: Calling crud_submission.submission.create_with_owner...")
+        # The CRUD function signature expects `submitter_id: int`, ensure current_user.id is an int
+        db_submission = crud_submission.submission.create_with_owner(
+            db=db, obj_in=submission_data, submitter_id=current_user.id # Pass user ID (int)
+        )
+        # CRUD method handles commit and refresh now
+        # db_submission.id is already populated after refresh in CRUD
+        submission_id_str = str(db_submission.id) # Convert UUID (or string) to string for the queue
+        print(f"Service: Submission record created by CRUD with ID: {submission_id_str[:8]}...")
+    except Exception as e:
+        print(f"Service: Database error during submission creation via CRUD: {type(e).__name__}: {e}")
+        # No explicit rollback needed here if CRUD handles it, but re-raise
+        # Convert specific DB errors to HTTPExceptions if desired
+        import traceback
+        traceback.print_exc() # Log the traceback from the database error
+        # Raise a general 500 error for DB issues during creation
+        raise HTTPException(status_code=500, detail=f"Failed to save submission record.") from e
 
-    background_tasks.add_task(process_submission_async, db_submission.id, app_settings.DATABASE_URL)
 
+    # 3. Enqueue submission for asynchronous processing
+    # Use asyncio.create_task to run the enqueue operation in the background
+    # without blocking the response. enqueue itself is quick (just adds to queue).
+    # Pass the string ID from the committed db_submission object
+    asyncio.create_task(submission_processing_queue.enqueue(submission_id_str))
+    print(f"Service: Submission {submission_id_str[:8]} enqueued for processing.")
+
+    # 4. Return initial submission info immediately
+    # The status here will be the initial one set by the CRUD (e.g., PENDING)
     return SubmissionInfo(
-        id=db_submission.id,
+        id=submission_id_str, # Use the string ID
         problem_id=db_submission.problem_id,
         contest_id=db_submission.contest_id,
-        user_email=current_user.email,
+        user_email=current_user.email, # Assuming User model has email
         language=db_submission.language,
-        status=SubmissionStatus(db_submission.status),
+        status=SubmissionStatus(db_submission.status), # Reflect initial status
         submitted_at=db_submission.submitted_at
     )
 
 
-def get_submission_by_id(db: Session, submission_id: str, current_user: db_models.User) -> Optional[SubmissionSchema]:
-    db_submission = crud_submission.submission.get_submission_with_owner_info(
-        db, id=submission_id, submitter_id=current_user.id
-    )
-    if not db_submission:
-        return None
+# Function to get submission details remains largely the same
+def get_submission_by_id(
+        db: Session,
+        submission_id: str, # Expecting string UUID from path parameter
+        current_user: db_models.User = Depends(get_current_active_user)
+    ) -> SubmissionSchema:
+    """
+    Retrieves details for a specific submission owned by the current user.
+    Uses the CRUD get method which handles the string ID.
+    """
+    print(f"Service: Fetching submission {submission_id} for user {current_user.email}")
 
+    # Fetch submission using CRUD, passing the string ID.
+    # The CRUD get method will handle any necessary UUID conversion or validation.
+    db_submission = crud_submission.submission.get(db, id_=submission_id)
+
+
+    if not db_submission:
+        print(f"Service: Submission {submission_id} not found in DB.")
+        raise HTTPException(status_code=404, detail="Submission not found.")
+
+    # Check ownership (Assuming submitter_id in DB is int)
+    if db_submission.submitter_id != current_user.id:
+        print(f"Service: User {current_user.email} (ID: {current_user.id}) tried to access submission {submission_id} owned by user ID {db_submission.submitter_id}.")
+        # Add logic here if admins have bypass rights
+        raise HTTPException(status_code=403, detail="Not authorized to view this submission.")
+
+    # Parse results_json (remains the same)
     parsed_results: List[TestCaseResult] = []
     if db_submission.results_json:
         try:
             results_list_of_dicts = json.loads(db_submission.results_json)
-
             if isinstance(results_list_of_dicts, list):
-                parsed_results = [TestCaseResult(**res_dict) for res_dict in results_list_of_dicts if
-                                  isinstance(res_dict, dict)]
+                # Validate each item is a dict before creating TestCaseResult
+                parsed_results = [TestCaseResult(**res_dict) for res_dict in results_list_of_dicts if isinstance(res_dict, dict)]
             else:
-                print(f"Warning: results_json for submission {db_submission.id} is not a list.")
-
+                print(f"Warning: Service: results_json for submission {db_submission.id} is not a list: {type(results_list_of_dicts)}")
+                parsed_results = [TestCaseResult(test_case_name="Result Parsing", status=SubmissionStatus.INTERNAL_ERROR, stderr="Invalid result format stored.")]
         except json.JSONDecodeError:
             print(f"Error decoding results_json for submission {db_submission.id}")
-            parsed_results = [TestCaseResult(test_case_name="Results", status=SubmissionStatus.INTERNAL_ERROR,
-                                             stderr="Failed to parse results")]
-        except Exception as e:
+            parsed_results = [TestCaseResult(test_case_name="Result Parsing", status=SubmissionStatus.INTERNAL_ERROR, stderr="Failed to parse results JSON.")]
+        except Exception as e: # Catch errors during Pydantic model creation
             print(f"Error creating TestCaseResult models for submission {db_submission.id}: {e}")
-            parsed_results = [TestCaseResult(test_case_name="Results", status=SubmissionStatus.INTERNAL_ERROR,
-                                             stderr=f"Failed to process results: {e}")]
+            parsed_results = [TestCaseResult(test_case_name="Result Processing", status=SubmissionStatus.INTERNAL_ERROR, stderr=f"Failed to process results: {e}")]
+
+
+    # Ensure status is a valid enum member
+    try:
+        status_enum = SubmissionStatus(db_submission.status)
+    except ValueError:
+        print(f"Warning: Service: Invalid status value '{db_submission.status}' in DB for submission {db_submission.id}. Defaulting to INTERNAL_ERROR.")
+        status_enum = SubmissionStatus.INTERNAL_ERROR
 
     return SubmissionSchema(
-        id=db_submission.id,
+        id=str(db_submission.id), # Return string ID
         problem_id=db_submission.problem_id,
         contest_id=db_submission.contest_id,
         language=db_submission.language,
         code=db_submission.code,
-        submitter_id=db_submission.submitter_id,
-        status=SubmissionStatus(db_submission.status),
+        submitter_id=db_submission.submitter_id, # Return int ID as per model
+        status=status_enum,
         results=parsed_results,
         submitted_at=db_submission.submitted_at
     )
 
 
-def get_all_submissions_for_user(db: Session, current_user: db_models.User) -> List[SubmissionInfo]:
-    db_submissions = crud_submission.submission.get_multi_by_owner(db, submitter_id=current_user.id)
+# Function to get all submissions for a user remains largely the same
+def get_all_submissions_for_user(
+        db: Session = Depends(get_db),
+        current_user: db_models.User = Depends(get_current_active_user)
+    ) -> List[SubmissionInfo]:
+    """
+    Retrieves a list of all submissions made by the current user.
+    """
+    print(f"Service: Fetching all submissions for user {current_user.email} (ID: {current_user.id})")
+    db_submissions = crud_submission.submission.get_multi_by_owner(
+        db, submitter_id=current_user.id, skip=0, limit=100 # Add pagination later
+    )
 
     submissions_info_list: List[SubmissionInfo] = []
     for sub in db_submissions:
-
-        submission_language_str = sub.language if sub.language is not None else "N/A"
-
+        # Ensure status is a valid enum member
         try:
-            submission_status_enum = SubmissionStatus(sub.status)
+            status_enum = SubmissionStatus(sub.status)
         except ValueError:
-            print(
-                f"Warning: DB status '{sub.status}' is not a valid SubmissionStatus enum value for submission {sub.id[:8]}...")
-            submission_status_enum = SubmissionStatus.INTERNAL_ERROR
+            print(f"Warning: Service: Invalid status value '{sub.status}' in DB for submission {sub.id}. Defaulting to INTERNAL_ERROR.")
+            status_enum = SubmissionStatus.INTERNAL_ERROR
 
         submissions_info_list.append(
             SubmissionInfo(
-                id=sub.id,
+                id=str(sub.id), # Return string ID
                 problem_id=sub.problem_id,
                 contest_id=sub.contest_id,
-                user_email=current_user.email,
-                language=submission_language_str,
-                status=submission_status_enum,
+                user_email=current_user.email, # Assuming User model has email
+                language=sub.language or "N/A",
+                status=status_enum,
                 submitted_at=sub.submitted_at
             )
         )
-    return sorted(submissions_info_list, key=lambda sub: sub.submitted_at, reverse=True)
+    # Sort by submission time, newest first
+    return sorted(submissions_info_list, key=lambda s: s.submitted_at, reverse=True)
