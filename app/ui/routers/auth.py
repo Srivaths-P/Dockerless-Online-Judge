@@ -29,7 +29,7 @@ async def handle_login(
         request: Request, db: Session = Depends(get_db),
         username: str = Form(...), password: str = Form(...)
 ):
-    user = crud_user.user.authenticate(db, email=username, password=password)
+    user = crud_user.user.authenticate(db=db, email=username, password=password)
     if not user or not crud_user.user.is_active(user):
         flash(request, "Incorrect email or password, or inactive account.", "danger")
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
@@ -63,7 +63,7 @@ async def handle_register(
         flash(request, "Invalid email format.", "danger")
         return RedirectResponse(url=request.url_for("ui_register_form"), status_code=HTTP_303_SEE_OTHER)
 
-    if crud_user.user.get_by_email(db, email=email):
+    if crud_user.user.get_by_email(db=db, email=email):
         flash(request, "Email already registered.", "danger")
         return RedirectResponse(url=request.url_for("ui_register_form"), status_code=HTTP_303_SEE_OTHER)
 
