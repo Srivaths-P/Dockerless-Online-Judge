@@ -1,4 +1,3 @@
-
 import asyncio
 import os
 import resource
@@ -10,7 +9,6 @@ import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Optional, List
-import json
 
 from sqlalchemy.orm import Session
 
@@ -131,10 +129,11 @@ def _systemd_bwrap_run(
 
 def _diff_files(out_path: str, exp_path: str) -> int:
     if not os.path.exists(out_path):
-        with open(out_path, 'w') as f: pass
+        with open(out_path, 'w'):
+            pass
     if not os.path.exists(exp_path):
-        with open(exp_path, 'w') as f: pass
-
+        with open(exp_path, 'w'):
+            pass
     cp = subprocess.run(
         ["diff", "-Z", "--strip-trailing-cr", "-q", out_path, exp_path],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
@@ -179,25 +178,17 @@ async def run_code_in_sandbox(
             if test_case.output_content:
                 f.write(test_case.output_content)
 
-        status = SubmissionStatus.INTERNAL_ERROR
         stderr_msg = None
-        exec_ms = 0.0
-        mem_kb = None
 
         if cfg["compile"]:
             unit_c = f"compile-{submission_id.hex[:8]}-{uuid.uuid4().hex[:4]}"
             compile_out_f = os.path.join(results_dir, "compile.out")
             compile_err_f = os.path.join(results_dir, "compile.err")
             bwrap_args_c = [
-                               "--ro-bind", "/usr", "/usr",
-                               "--ro-bind", "/lib", "/lib",
-                               "--ro-bind", "/lib64", "/lib64",
-                               "--bind", td, "/sandbox",
-                               "--proc", "/proc",
-                               "--dev", "/dev",
-                               "--chdir", "/sandbox",
-                               "--unshare-pid",
-                               "--unshare-net",
+                               "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
+                               "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
+                               "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
+                               "--unshare-pid", "--unshare-net",
                            ] + cfg["compile"]
 
             cres = await asyncio.get_running_loop().run_in_executor(
@@ -235,26 +226,17 @@ async def run_code_in_sandbox(
 
         unit_e = f"exec-{submission_id.hex[:8]}-{uuid.uuid4().hex[:4]}"
         bwrap_args_e = [
-                           "--ro-bind", "/usr", "/usr",
-                           "--ro-bind", "/lib", "/lib",
-                           "--ro-bind", "/lib64", "/lib64",
-                           "--bind", td, "/sandbox",
-                           "--proc", "/proc",
-                           "--dev", "/dev",
-                           "--chdir", "/sandbox",
-                           "--unshare-pid",
-                           "--unshare-net",
+                           "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
+                           "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
+                           "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
+                           "--unshare-pid", "--unshare-net",
                        ] + cfg["run"]
 
         t0 = time.perf_counter_ns()
         eres = await asyncio.get_running_loop().run_in_executor(
-            blocking_executor,
-            _systemd_bwrap_run,
-            unit_e,
-            problem.time_limit_sec + 1,
-            problem.memory_limit_mb,
-            bwrap_args_e,
-            in_f, out_f, err_f
+            blocking_executor, _systemd_bwrap_run, unit_e,
+            problem.time_limit_sec + 1, problem.memory_limit_mb,
+            bwrap_args_e, in_f, out_f, err_f
         )
         exec_ns = time.perf_counter_ns() - t0
 
@@ -299,26 +281,20 @@ async def run_code_in_sandbox(
             exec_ms = float(problem.time_limit_sec * 1000)
 
         return TestCaseResult(
-            test_case_name=test_case.name,
-            status=status,
-            stdout=None,
-            stderr=stderr_msg,
-            execution_time_ms=exec_ms,
-            memory_used_kb=mem_kb
+            test_case_name=test_case.name, status=status, stdout=None, stderr=stderr_msg,
+            execution_time_ms=exec_ms, memory_used_kb=mem_kb
         )
-
     except Exception as e:
         print(f"!!! Critical error in run_code_in_sandbox setup for {submission_id} !!!")
         traceback.print_exc()
         return TestCaseResult(
-            test_case_name=test_case.name,
-            status=SubmissionStatus.INTERNAL_ERROR,
+            test_case_name=test_case.name, status=SubmissionStatus.INTERNAL_ERROR,
             stderr=f"Sandbox setup/internal error: {type(e).__name__}: {e}",
-            execution_time_ms=0.0,
-            memory_used_kb=None
+            execution_time_ms=0.0, memory_used_kb=None
         )
     finally:
         shutil.rmtree(td, ignore_errors=True)
+
 
 class SubmissionProcessingQueue:
     def __init__(self, worker_count: int):
@@ -356,7 +332,7 @@ class SubmissionProcessingQueue:
         print("[Queue] All workers stopped.")
         while not self._queue.empty():
             try:
-                item = self._queue.get_nowait()
+                self._queue.get_nowait()
                 self._queue.task_done()
             except asyncio.QueueEmpty:
                 break
@@ -383,7 +359,7 @@ class SubmissionProcessingQueue:
             except Exception as e:
                 print(f"[Worker {worker_id}] CRITICAL ERROR processing {submission_id[:8]}: {type(e).__name__} - {e}")
                 traceback.print_exc()
-                await self._mark_submission_internal_error(submission_id, f"Worker processing failed: {e}")
+                await self._handle_error(submission_id, f"Worker processing failed: {e}")
             end_time = time.monotonic()
             print(
                 f"[Worker {worker_id}] Finished submission {submission_id[:8]} in {end_time - start_time:.2f}s. Queue size: {self._queue.qsize()}")
@@ -392,7 +368,7 @@ class SubmissionProcessingQueue:
 
     async def _process_submission(self, submission_id: str, worker_id: int):
         db: Optional[Session] = None
-        sub = None
+
         try:
             db = SessionLocal()
             sub = crud_submission.submission.get(db, id_=submission_id)
@@ -438,6 +414,7 @@ class SubmissionProcessingQueue:
                         test_case=tc,
                         language=sub.language
                     )
+                    print('Hi')
                     print(f"[Worker {worker_id}] TC {i + 1} Result for {submission_id[:8]}: {res.status.name}")
                 except Exception as e:
                     print(f"[Worker {worker_id}] Executor error on TC {i + 1} for {submission_id[:8]}: {e}")
@@ -459,14 +436,16 @@ class SubmissionProcessingQueue:
             print(f"[Worker {worker_id}] Results persisted for {submission_id[:8]}.")
         except Exception as e:
             print(
-                f"[Worker {worker_id}] Unexpected error in _process_submission for {submission_id[:8]}: {type(e).__name__}: {e}")
+                f"[Worker {worker_id}] Unexpected error in _process_submission (sync DB part) for {submission_id[:8]}: {type(e).__name__}: {e}")
             traceback.print_exc()
-            await self._mark_submission_internal_error(submission_id, f"Processing failed: {e}")
+            if db:
+                db.rollback()
+            raise
         finally:
             if db:
                 db.close()
 
-    async def _mark_submission_internal_error(self, submission_id: str, error_message: str):
+    async def _handle_error(self, submission_id: str, error_message: str):
         db: Optional[Session] = None
         try:
             db = SessionLocal()
@@ -480,9 +459,11 @@ class SubmissionProcessingQueue:
                 print(f"[Queue Fallback] Marked {submission_id[:8]} as INTERNAL_ERROR due to: {error_message[:100]}...")
         except Exception as db_err:
             print(f"[Queue Fallback] FAILED to mark {submission_id[:8]} as INTERNAL_ERROR in DB: {db_err}")
+            if db: db.rollback()
         finally:
             if db:
                 db.close()
+
 
 QUEUE_WORKER_COUNT = (os.cpu_count() or 1)
 submission_processing_queue = SubmissionProcessingQueue(worker_count=QUEUE_WORKER_COUNT)

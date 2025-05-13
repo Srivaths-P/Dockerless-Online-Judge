@@ -9,8 +9,6 @@ from sqlalchemy import pool
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 
-# Add your project's root directory to the Python path
-# This allows Alembic to find your 'app' module
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 from app.db.base_class import Base  # Import your Base

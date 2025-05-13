@@ -197,37 +197,38 @@
                        href="{{ url_for('ui_home') }}">Home</a>
                 </li>
                 {% if current_user %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.url.path.startswith(url_for('ui_list_contests')|string) %}active{% endif %}"
-                       href="{{ url_for('ui_list_contests') }}">Contests</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.url.path.startswith(url_for('ui_my_submissions')|string) %}active{% endif %}"
-                       href="{{ url_for('ui_my_submissions') }}">My Submissions</a>
-                </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.url.path.startswith(url_for('ui_list_contests')|string) %}active{% endif %}"
+                           href="{{ url_for('ui_list_contests') }}">Contests</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.url.path.startswith(url_for('ui_my_submissions')|string) %}active{% endif %}"
+                           href="{{ url_for('ui_my_submissions') }}">My Submissions</a>
+                    </li>
                 {% endif %}
             </ul>
             <ul class="navbar-nav ms-auto mb-2 mb-md-0">
                 {% if current_user %}
-                <li class="nav-item dropdown">
-                    <a aria-expanded="false" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#"
-                       id="navbarDropdownUser" role="button">
-                        <i class="bi bi-person-circle"></i> {{ current_user.email if current_user.email else 'User' }}
-                    </a>
-                    <ul aria-labelledby="navbarDropdownUser" class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
-                        <li><a class="dropdown-item" href="{{ url_for('ui_logout') }}"><i
-                                class="bi bi-box-arrow-right"></i> Logout</a></li>
-                    </ul>
-                </li>
+                    <li class="nav-item dropdown">
+                        <a aria-expanded="false" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#"
+                           id="navbarDropdownUser" role="button">
+                            <i class="bi bi-person-circle"></i> {{ current_user.email if current_user.email else 'User' }}
+                        </a>
+                        <ul aria-labelledby="navbarDropdownUser"
+                            class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{{ url_for('ui_logout') }}"><i
+                                    class="bi bi-box-arrow-right"></i> Logout</a></li>
+                        </ul>
+                    </li>
                 {% else %}
-                <li class="nav-item">
-                    <a class="nav-link {% if request.url.path == url_for('ui_login_form')|string %}active{% endif %}"
-                       href="{{ url_for('ui_login_form') }}">Login</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.url.path == url_for('ui_register_form')|string %}active{% endif %}"
-                       href="{{ url_for('ui_register_form') }}">Register</a>
-                </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.url.path == url_for('ui_login_form')|string %}active{% endif %}"
+                           href="{{ url_for('ui_login_form') }}">Login</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.url.path == url_for('ui_register_form')|string %}active{% endif %}"
+                           href="{{ url_for('ui_register_form') }}">Register</a>
+                    </li>
                 {% endif %}
             </ul>
         </div>
@@ -236,16 +237,16 @@
 
 <main class="container flex-shrink-0">
     {% with messages = get_flashed_messages(request) %}
-    {% if messages %}
-    <div class="flash-messages-container">
-        {% for msg in messages %}
-        <div class="alert alert-{{ msg.category }} alert-dismissible fade show mt-3" role="alert">
-            {{ msg.message }}
-            <button aria-label="Close" class="btn-close" data-bs-dismiss="alert" type="button"></button>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
+        {% if messages %}
+            <div class="flash-messages-container">
+                {% for msg in messages %}
+                    <div class="alert alert-{{ msg.category }} alert-dismissible fade show mt-3" role="alert">
+                        {{ msg.message }}
+                        <button aria-label="Close" class="btn-close" data-bs-dismiss="alert" type="button"></button>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
     {% endwith %}
     {% block content %}{% endblock %}
 </main>

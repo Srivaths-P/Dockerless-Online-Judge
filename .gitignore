@@ -51,3 +51,5 @@ ehthumbs.db
 .ipynb_checkpoints
 
 judge.db
+judge.db-shm
+judge.db-wal

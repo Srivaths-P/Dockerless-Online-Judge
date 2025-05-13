@@ -3,7 +3,6 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-
 from app.api import deps
 from app.db import models as db_models
 from app.schemas.submission import SubmissionCreate, Submission as SubmissionSchema, SubmissionInfo

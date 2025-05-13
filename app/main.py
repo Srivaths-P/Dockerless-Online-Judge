@@ -98,7 +98,7 @@ app.include_router(ui_submissions_router.router, prefix="/my_submissions", tags=
 
 
 @app.exception_handler(StarletteHTTPException)
-async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     print(f"HTTP Exception: {exc.status_code} for {request.url} - Detail: {exc.detail}")
     if exc.status_code == 404:
         try:
