@@ -11,6 +11,7 @@ An online judge system built with FastAPI, Jinja2, SQLite, Bootstrap 5, and Bubb
 * Asynchronous submission processing
 * View submission results (status, time, memory, output/errors)
 * Database for users and submissions (SQLite)
+* Write-Ahead Logging for SQLite Database
 * Responsive UI
 
 ## Getting Started
@@ -18,7 +19,7 @@ An online judge system built with FastAPI, Jinja2, SQLite, Bootstrap 5, and Bubb
 ### Prerequisites
 
 * Python (v3.13 recommended)
-* `bubblewrap` (`bwrap`) installed on your system.
+* `bubblewrap` installed on your system.
 * `gcc` and `g++` installed (for C and C++ support).
 
 ### Installation
@@ -48,16 +49,11 @@ An online judge system built with FastAPI, Jinja2, SQLite, Bootstrap 5, and Bubb
    ALGORITHM=HS256
    ACCESS_TOKEN_EXPIRE_MINUTES=30
    DATABASE_URL=sqlite:///./judge.db
-   # Optional: If g++ is not in your default PATH, you can specify it
-   # GPP_PATH=/path/to/your/g++
    ```
 
 5. **Set up the Database:**
    This project uses SQLAlchemy and Alembic for database migrations.
    ```bash
-   # Initialize Alembic (only if you haven't run this command before)
-   alembic init alembic 
-
    # Generate migration based on models (if models changed since last migration)
    alembic revision --autogenerate -m "add user and submission tables"
    
