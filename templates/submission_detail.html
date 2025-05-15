@@ -1,8 +1,10 @@
+{# templates/submission_detail.html #}
 {% extends "base.html" %}
 
 {% block title %}Submission {{ submission.id[:8] }}... - Online Judge{% endblock %}
 
 {% block content %}
+    {# ... (Overview and Submitted Code sections remain the same) ... #}
     <div class="d-flex justify-content-between align-items-center mb-2">
         <h2 class="mb-0">Submission Details</h2>
         <div>
@@ -63,12 +65,11 @@
         <div class="card-header">
             Submitted Code
         </div>
-        <div class="card-body p-0">
-            {# Replace '+' with 'p' for c++ for Prism language class if needed #}
-            <pre class="submission-code m-0"><code
-                    class="language-{{ submission.language.lower().replace('+', 'p') if submission.language else 'clike' }}">{{ submission.code }}</code></pre>
+        <div class="card-body codemirror-static-container">
+            <textarea id="submittedCodeViewer" class="submitted-code-viewer-area" readonly>{{ submission.code }}</textarea>
         </div>
     </div>
+
 
     <h3 class="mt-4 mb-3">Test Case Results</h3>
     {% if submission.results %}
@@ -79,32 +80,27 @@
                     <span class="badge rounded-pill status-{{ result.status.value }} px-2 py-1">{{ result.status.value|replace("_", " ")|title }}</span>
                 </div>
                 <div class="card-body">
+                    {# RE-ADD Time and Memory display for each test case #}
                     {% if result.execution_time_ms is not none %}
-                        <p class="mb-1"><small><strong>Time:</strong> {{ result.execution_time_ms }} ms</small></p>
+                        <p class="mb-1"><small><strong>Time:</strong> {{ "%.2f"|format(result.execution_time_ms) }} ms</small></p>
                     {% endif %}
                     {% if result.memory_used_kb is not none %}
                         <p class="mb-1"><small><strong>Memory:</strong> {{ result.memory_used_kb }} KB</small></p>
                     {% endif %}
 
-                    {% if result.stdout and result.status == 'WRONG_ANSWER' %}
-                        <hr>
-                        <p class="mb-1"><strong>Your Output:</strong></p>
-                        <pre class="p-2 small"><code>{{ result.stdout }}</code></pre>
-                    {% endif %}
-                    {% if result.stderr %}
-                        <hr>
-                        <p class="mb-1"><strong>Error Output / Compiler Messages:</strong></p>
-                        <pre class="p-2 small text-danger"><code class="language-clike">{{ result.stderr }}</code></pre>
-                    {% endif %}
-                    {% if not result.stdout and not result.stderr and result.status != 'ACCEPTED' and result.status != 'PENDING' and
-        result.status != 'RUNNING' and result.status != 'COMPILATION_ERROR' %}
-                        <p class="text-muted fst-italic small mt-2">No standard output or standard error produced for
-                            this verdict.</p>
+                    {# Keep stdout and stderr of user's program execution HIDDEN from this card #}
+                    {# If no time/memory, and status is not AC/PENDING/RUNNING, show a minimal message #}
+                    {% if result.execution_time_ms is none and result.memory_used_kb is none and result.status.value not in ['ACCEPTED', 'PENDING', 'RUNNING', 'COMPILATION_ERROR'] %}
+                        <p class="text-muted fst-italic small mt-2">No detailed execution metrics available for this verdict.</p>
+                    {% elif result.status.value not in ['COMPILATION_ERROR'] and not (result.execution_time_ms is not none or result.memory_used_kb is not none) %}
+                         {# This case might be redundant with the one above, but covers if only one metric is missing #}
+                         <p class="text-muted fst-italic small mt-2">Execution metrics not available.</p>
                     {% endif %}
                 </div>
             </div>
         {% endfor %}
     {% elif submission.status == 'COMPILATION_ERROR' %}
+        {# For COMPILATION_ERROR, show the compiler's stderr (highlighted by Prism) #}
         <div class="alert alert-danger d-flex align-items-center" role="alert">
             <i class="bi bi-x-octagon-fill me-2 fs-4"></i>
             <div>
@@ -125,30 +121,64 @@
             Processing submission... This page will refresh automatically.
         </div>
     {% else %}
+        {# For other general statuses like INTERNAL_ERROR that might not have iterated test results #}
         <div class="alert alert-secondary" role="alert">
-            No test case results available for this submission, or it's still processing.
+            No detailed test case results available for this submission (Status: {{ submission.status.value|replace("_", " ")|title }}).
+            {% if submission.results and submission.results[0].stderr %}
+                 <p class="mb-1 mt-2">Error details:</p>
+                 {# Use Prism for this stderr, assuming it's system/compiler error not user program output #}
+                 <pre class="m-0"><code class="language-clike">{{ submission.results[0].stderr }}</code></pre>
+            {% endif %}
         </div>
     {% endif %}
 
     <div class="mt-4">
         <a class="btn btn-secondary" href="{{ url_for('ui_my_submissions') }}"><i class="bi bi-arrow-left"></i> Back to
-            My
-            Submissions</a>
+            My Submissions</a>
     </div>
 {% endblock %}
 
 {% block extra_js %}
+    {{ super() }}
+
     {% if submission.status == 'PENDING' or submission.status == 'RUNNING' %}
         <script>
             setTimeout(function () {
                 window.location.reload();
-            }, 5000); // Refresh every 5 seconds
+            }, 5000);
         </script>
     {% endif %}
+
     <script>
-        // Ensure Prism highlights static code blocks on page load
-        if (typeof Prism !== 'undefined') {
-            Prism.highlightAll();
-        }
+        document.addEventListener('DOMContentLoaded', function () {
+            const codeViewerTextarea = document.getElementById('submittedCodeViewer');
+            if (codeViewerTextarea) {
+                const language = "{{ submission.language.lower() }}";
+                let mode = 'clike';
+
+                if (language === 'python') {
+                    mode = 'python';
+                } else if (language === 'c++') {
+                    mode = 'text/x-c++src';
+                } else if (language === 'c') {
+                    mode = 'text/x-csrc';
+                }
+
+                CodeMirror.fromTextArea(codeViewerTextarea, {
+                    value: codeViewerTextarea.value,
+                    mode: mode,
+                    theme: "material-darker",
+                    lineNumbers: true,
+                    readOnly: true,
+                    lineWrapping: true,
+                    height: "auto",
+                    viewportMargin: Infinity,
+                });
+            }
+
+            if (typeof Prism !== 'undefined') {
+                Prism.highlightAll();
+            }
+        });
     </script>
 {% endblock %}

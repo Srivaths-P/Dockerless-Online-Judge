@@ -8,11 +8,10 @@
             <h2 class="mb-0">{{ problem.title }}</h2>
             <a class="btn btn-sm btn-outline-secondary"
                href="{{ url_for('ui_contest_detail', contest_id=contest_id) }}">
-                <i class="bi bi-collection"></i> Back to Contest: {{ contest_id|title }}
+                <i class="bi bi-collection"></i> Back to Contest: {{ contest_title }}
             </a>
         </div>
 
-        {# Problem Statement Card - Takes full width #}
         <div class="card shadow-sm mb-4">
             <div class="card-header"><h5 class="mb-0">Problem Statement</h5></div>
             <div class="card-body problem-description-rendered">
@@ -36,8 +35,46 @@
             </div>
         </div>
 
-        {# Submission Form Card - Takes full width, stacked below #}
-        <div class="card shadow-sm mb-4"> {# Added mb-4 for spacing below #}
+        {% if generator_available %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header"><h5 class="mb-0">Test Case Generator</h5></div>
+                <div class="card-body">
+                    <p>Use the generator to create a sample test case (input and expected output) to help you understand
+                        the problem.</p>
+                    <button id="generateTestcaseBtn" class="btn btn-secondary mb-3">
+                        <span id="generateButtonText"><i class="bi bi-shuffle"></i> Generate Sample Test Case</span>
+                        <span id="generateSpinner" class="spinner-border spinner-border-sm d-none" role="status"
+                              aria-hidden="true"></span>
+                        <span id="generateLoadingText" class="d-none"> Generating...</span>
+                    </button>
+
+                    <div id="generatorResults" class="d-none">
+                        <h4>Generated Test Case</h4>
+                        <div class="mb-3">
+                            <p class="mb-1"><strong>Input:</strong></p>
+                            <pre id="generatorInput" class="p-2 small"></pre>
+                        </div>
+                        <div>
+                            <p class="mb-1"><strong>Expected Output:</strong></p>
+                            <pre id="generatorOutput" class="p-2 small"></pre>
+                        </div>
+                        <div id="generatorError" class="alert alert-danger d-none mt-3"></div>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="card shadow-sm mb-4">
+                <div class="card-header"><h5 class="mb-0">Test Case Generator</h5></div>
+                <div class="card-body">
+                    <div class="alert alert-info mb-0" role="alert">
+                        <i class="bi bi-info-circle me-2"></i> A sample test case generator is not available for this
+                        problem.
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="card shadow-sm mb-4">
             <div class="card-header"><h5 class="mb-0">Submit Solution</h5></div>
             <div class="card-body">
                 <form action="{{ url_for('ui_handle_submission', contest_id=contest_id, problem_id=problem.id) }}"
@@ -50,15 +87,14 @@
                                 <option value="{{ lang }}"
                                         {% if loop.first %}selected{% endif %}
                                         data-codemirror-mode="{% set lower_lang = lang.lower() %}{% if lower_lang == 'python' %}python{% elif lower_lang == 'c++' %}text/x-c++src{% elif lower_lang == 'c' %}text/x-csrc{% else %}clike{% endif %}">
-                                    {{ lang }}
+                                    {{ lang|title }}
                                 </option>
                             {% endfor %}
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label" for="code">Code:</label>
+                        <label class="form-label" for="codeTextarea">Code:</label>
                         <textarea class="form-control" id="codeTextarea" name="code" required rows="18"></textarea>
-                        {# CodeMirror will replace this #}
                     </div>
                     <div class="d-grid">
                         <button class="btn btn-primary btn-lg" type="submit"><i class="bi bi-cloud-upload"></i> Submit
@@ -72,22 +108,24 @@
 {% endblock %}
 
 {% block extra_js %}
+    {{ super() }}
+
     <script>
         let editor;
 
         document.addEventListener('DOMContentLoaded', function () {
             const codeTextarea = document.getElementById('codeTextarea');
             const languageSelect = document.getElementById('languageSelect');
-            const submissionForm = document.getElementById('submissionForm'); // Get the form
+            const submissionForm = document.getElementById('submissionForm');
 
-            function getCodeMirrorMode(language) {
-                const selectedOption = languageSelect.options[languageSelect.selectedIndex];
+            function getCodeMirrorMode(selectedLanguageValue) {
+                const selectedOption = Array.from(languageSelect.options).find(opt => opt.value === selectedLanguageValue);
                 if (selectedOption && selectedOption.dataset.codemirrorMode) {
                     return selectedOption.dataset.codemirrorMode;
                 }
-                const lowerLang = language.toLowerCase();
+                const lowerLang = selectedLanguageValue.toLowerCase();
                 if (lowerLang === 'python') return 'python';
-                if (lowerLang === 'c++') return 'text/x-c++src'; // Corrected from previous version
+                if (lowerLang === 'c++') return 'text/x-c++src';
                 if (lowerLang === 'c') return 'text/x-csrc';
                 return 'clike';
             }
@@ -95,7 +133,7 @@
             function initializeEditor(mode) {
                 if (editor) {
                     editor.toTextArea();
-                } // Clean up old editor if exists
+                }
                 editor = CodeMirror.fromTextArea(codeTextarea, {
                     lineNumbers: true,
                     mode: mode,
@@ -113,26 +151,34 @@
                         },
                         "Esc": function (cm) {
                             if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
+                        },
+                        "Tab": function(cm) {
+                            if (cm.somethingSelected()) {
+                                cm.indentSelection("add");
+                            } else {
+                                cm.replaceSelection(cm.getOption("indentWithTabs")? "\t" :
+                                    Array(cm.getOption("indentUnit") + 1).join(" "));
+                            }
+                        },
+                        "Shift-Tab": function(cm) {
+                            cm.indentSelection("subtract");
                         }
                     }
                 });
-                // Update original textarea on CodeMirror change for form submission
-                editor.on('change', function (instance) {
+
+                editor.on('change', function(instance) {
                     codeTextarea.value = instance.getValue();
                 });
-                // Also update on blur to be safe
                 editor.on('blur', function (instance) {
                     codeTextarea.value = instance.getValue();
                 });
 
-                // Load initial content from textarea (if any, e.g., browser back button)
                 if (codeTextarea.value) {
                     editor.setValue(codeTextarea.value);
                 }
             }
 
             if (codeTextarea && languageSelect) {
-                // Initialize with the mode for the initially selected language
                 initializeEditor(getCodeMirrorMode(languageSelect.value));
 
                 languageSelect.addEventListener('change', function () {
@@ -140,14 +186,13 @@
                     if (editor) {
                         editor.setOption("mode", selectedMode);
                     } else {
-                        initializeEditor(selectedMode); // Fallback initialization
+                         initializeEditor(selectedMode);
                     }
                 });
 
-                // Ensure CodeMirror's content is copied to the hidden textarea just before form submission
-                if (submissionForm) { // Check if form exists
-                    submissionForm.addEventListener('submit', function () {
-                        if (editor) { // Check if editor exists
+                if (submissionForm) {
+                    submissionForm.addEventListener('submit', function() {
+                        if (editor) {
                             codeTextarea.value = editor.getValue();
                         }
                     });
@@ -155,4 +200,84 @@
             }
         });
     </script>
+
+    {% if generator_available %}
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                const generateButton = document.getElementById('generateTestcaseBtn');
+                const generateButtonText = document.getElementById('generateButtonText');
+                const generateSpinner = document.getElementById('generateSpinner');
+                const generateLoadingText = document.getElementById('generateLoadingText');
+                const generatorResultsDiv = document.getElementById('generatorResults');
+                const generatorInputPre = document.getElementById('generatorInput');
+                const generatorOutputPre = document.getElementById('generatorOutput');
+                const generatorErrorDiv = document.getElementById('generatorError');
+
+                if (generateButton) {
+                    generateButton.addEventListener('click', async function () {
+                        generateButton.disabled = true;
+                        generateButtonText.classList.add('d-none');
+                        generateSpinner.classList.remove('d-none');
+                        generateLoadingText.classList.remove('d-none');
+                        generatorResultsDiv.classList.add('d-none');
+                        generatorErrorDiv.classList.add('d-none');
+                        generatorInputPre.textContent = '';
+                        generatorOutputPre.textContent = '';
+
+                        const contestId = "{{ contest_id }}";
+                        const problemId = "{{ problem.id }}";
+                        const apiUrl = `/api/v1/contests/${contestId}/problems/${problemId}/generate_testcase`;
+
+                        try {
+                            const response = await fetch(apiUrl, {method: 'POST'});
+
+                            generatorResultsDiv.classList.remove('d-none');
+
+                            if (response.ok) {
+                                const result = await response.json();
+                                if (result.status !== 'error' && result.error === null) {
+                                    generatorInputPre.textContent = result.input || 'No input generated.';
+                                    generatorOutputPre.textContent = result.output || 'No output generated.';
+                                    generatorErrorDiv.classList.add('d-none');
+                                    console.log("Generator Success:", result);
+                                } else {
+                                    generatorInputPre.textContent = 'Generation process failed.';
+                                    generatorOutputPre.textContent = 'Generation process failed.';
+                                    generatorErrorDiv.textContent = `Error: ${result.error || 'Sandbox error occurred.'}`;
+                                    generatorErrorDiv.classList.remove('d-none');
+                                    console.error("Generator Sandbox Error:", result);
+                                }
+                            } else {
+                                generatorInputPre.textContent = 'Generation failed.';
+                                generatorOutputPre.textContent = 'Generation failed.';
+                                let errorDetail = `HTTP Error ${response.status}: ${response.statusText}`;
+                                try {
+                                    const errorJson = await response.json();
+                                    errorDetail = `Error (${response.status}): ${errorJson.detail || response.statusText}`;
+                                } catch (e) {
+                                    console.warn("Failed to parse error response as JSON, using statusText.");
+                                }
+                                generatorErrorDiv.textContent = errorDetail;
+                                generatorErrorDiv.classList.remove('d-none');
+                                console.error("Generator API Error:", response.status, response.statusText);
+                            }
+
+                        } catch (error) {
+                            generatorResultsDiv.classList.remove('d-none');
+                            generatorInputPre.textContent = 'Generation failed.';
+                            generatorOutputPre.textContent = 'Generation failed.';
+                            generatorErrorDiv.textContent = `Request failed: ${error}`;
+                            generatorErrorDiv.classList.remove('d-none');
+                            console.error("Generator Fetch Error:", error);
+                        } finally {
+                            generateButton.disabled = false;
+                            generateButtonText.classList.remove('d-none');
+                            generateSpinner.classList.add('d-none');
+                            generateLoadingText.classList.add('d-none');
+                        }
+                    });
+                }
+            });
+        </script>
+    {% endif %}
 {% endblock %}

@@ -18,6 +18,9 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
 
+    last_submission_at = Column(DateTime(timezone=True), nullable=True)
+    last_generation_at = Column(DateTime(timezone=True), nullable=True)
+
     submissions = relationship("Submission", back_populates="submitter")
 
 

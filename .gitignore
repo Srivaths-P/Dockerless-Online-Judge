@@ -53,3 +53,5 @@ ehthumbs.db
 judge.db
 judge.db-shm
 judge.db-wal
+.vercel
+logs/

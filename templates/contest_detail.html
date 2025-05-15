@@ -1,3 +1,4 @@
+{# templates/contest_detail.html #}
 {% extends "base.html" %}
 
 {% block title %}{{ contest.title }} - Online Judge{% endblock %}
@@ -6,9 +7,26 @@
     <div class="mb-4 p-4 bg-body-tertiary rounded-3 shadow-sm">
         <div class="d-flex justify-content-between align-items-center">
             <h2 class="display-6 mb-0">{{ contest.title }}</h2>
-            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('ui_list_contests') }}"><i
-                    class="bi bi-arrow-left"></i> All Contests</a>
+            <div>
+                {% set status = contest.status %}
+                {% set status_class = 'bg-info text-dark' if 'Upcoming' in status else ('bg-success' if 'Active' in status else ('bg-secondary' if status == 'Ended' else 'bg-warning')) %}
+                <span class="badge {{ status_class }} me-2">{{ status }}</span>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('ui_list_contests') }}"><i
+                        class="bi bi-arrow-left"></i> All Contests</a>
+            </div>
         </div>
+        {% if contest.start_time %}
+            <p class="text-muted mb-1"><small>
+                Starts: {{ contest.start_time.strftime('%Y-%m-%d %H:%M %Z') }}
+                {% if contest.duration_minutes is not none %}
+                    | Duration: {{ contest.duration_minutes }} minutes
+                    (
+                    {{ (contest.start_time + G.timedelta_class(minutes=contest.duration_minutes)).strftime('%Y-%m-%d %H:%M %Z') }}
+                    End)
+                {% endif %}
+            </small></p>
+        {% endif %}
+
         {% if contest.description_md %}
             <hr class="my-3">
             <div class="lead problem-description-rendered">

@@ -48,6 +48,7 @@ class SubmissionInDBBase(SubmissionBase):
     status: SubmissionStatus
     submitted_at: datetime
     results: List[TestCaseResult] = []
+    user_email: Optional[str] = None
 
     class Config:
         from_attributes = True

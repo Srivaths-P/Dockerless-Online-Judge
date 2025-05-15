@@ -1,7 +1,9 @@
 import os
+from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
+from pydantic import Field
 
 load_dotenv()
 
@@ -18,9 +20,4 @@ class Settings(BaseSettings):
         if not os.path.exists(".env") and os.path.exists("../.env"):
             env_file = "../.env"
 
-
-settings = Settings(
-    SECRET_KEY=os.getenv('SECRET_KEY'),
-    SESSION_SECRET_KEY=os.getenv('SESSION_SECRET_KEY'),
-    DATABASE_URL=os.getenv('DATABASE_URL')
-)
+settings = Settings()
