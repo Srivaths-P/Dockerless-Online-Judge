@@ -54,7 +54,7 @@ def _make_systemd_bwrap_cmd(
         bwrap_args: list
 ) -> list:
     cmd = [
-              "systemd-run", "--quiet", "--scope",
+              "systemd-run", "--quiet", "--scope", "--user",
               f"--unit={unit}", "--slice=judge.slice",
               "-p", "TasksMax=64",
               "-p", f"RuntimeMaxSec={tlim}",
@@ -130,11 +130,11 @@ def _systemd_bwrap_run(
         systemd_mem_bytes = int(mem_show.stdout.strip())
 
     subprocess.run(
-        ["systemctl", "reset-failed", f"{unit}.scope"],
+        ["systemctl", "--user", "reset-failed", f"{unit}.scope"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
     )
     subprocess.run(
-        ["systemctl", "stop", f"{unit}.scope"],
+        ["systemctl", "--user", "stop", f"{unit}.scope"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
     )
 
