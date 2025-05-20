@@ -27,13 +27,14 @@ if config.config_file_name is not None:
 # Assuming your Base is defined in app/db/base_class.py
 try:
     from app.db.base_class import Base  # Import your Base
+
     target_metadata = Base.metadata
     # Optional: Add print for confirmation - removed as per user request
     # print("Alembic env.py: Imported Base.metadata successfully.")
 except ImportError as e:
-     print(f"Alembic env.py ERROR: Could not import your Base class: {e}")
-     print("Please ensure 'app.db.base_class' exists and contains a 'Base' object.")
-     target_metadata = None # Prevent autogenerate from running without metadata
+    print(f"Alembic env.py ERROR: Could not import your Base class: {e}")
+    print("Please ensure 'app.db.base_class' exists and contains a 'Base' object.")
+    target_metadata = None  # Prevent autogenerate from running without metadata
 
 
 # other values from the config, defined by the needs of env.py,

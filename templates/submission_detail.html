@@ -1,10 +1,8 @@
-{# templates/submission_detail.html #}
 {% extends "base.html" %}
 
 {% block title %}Submission {{ submission.id[:8] }}... - Online Judge{% endblock %}
 
 {% block content %}
-    {# ... (Overview and Submitted Code sections remain the same) ... #}
     <div class="d-flex justify-content-between align-items-center mb-2">
         <h2 class="mb-0">Submission Details</h2>
         <div>
@@ -66,7 +64,8 @@
             Submitted Code
         </div>
         <div class="card-body codemirror-static-container">
-            <textarea id="submittedCodeViewer" class="submitted-code-viewer-area" readonly>{{ submission.code }}</textarea>
+            <textarea id="submittedCodeViewer" class="submitted-code-viewer-area"
+                      readonly>{{ submission.code }}</textarea>
         </div>
     </div>
 
@@ -80,27 +79,24 @@
                     <span class="badge rounded-pill status-{{ result.status.value }} px-2 py-1">{{ result.status.value|replace("_", " ")|title }}</span>
                 </div>
                 <div class="card-body">
-                    {# RE-ADD Time and Memory display for each test case #}
                     {% if result.execution_time_ms is not none %}
-                        <p class="mb-1"><small><strong>Time:</strong> {{ "%.2f"|format(result.execution_time_ms) }} ms</small></p>
+                        <p class="mb-1"><small><strong>Time:</strong> {{ "%.2f"|format(result.execution_time_ms) }}
+                            ms</small></p>
                     {% endif %}
                     {% if result.memory_used_kb is not none %}
                         <p class="mb-1"><small><strong>Memory:</strong> {{ result.memory_used_kb }} KB</small></p>
                     {% endif %}
 
-                    {# Keep stdout and stderr of user's program execution HIDDEN from this card #}
-                    {# If no time/memory, and status is not AC/PENDING/RUNNING, show a minimal message #}
                     {% if result.execution_time_ms is none and result.memory_used_kb is none and result.status.value not in ['ACCEPTED', 'PENDING', 'RUNNING', 'COMPILATION_ERROR'] %}
-                        <p class="text-muted fst-italic small mt-2">No detailed execution metrics available for this verdict.</p>
+                        <p class="text-muted fst-italic small mt-2">No detailed execution metrics available for this
+                            verdict.</p>
                     {% elif result.status.value not in ['COMPILATION_ERROR'] and not (result.execution_time_ms is not none or result.memory_used_kb is not none) %}
-                         {# This case might be redundant with the one above, but covers if only one metric is missing #}
-                         <p class="text-muted fst-italic small mt-2">Execution metrics not available.</p>
+                        <p class="text-muted fst-italic small mt-2">Execution metrics not available.</p>
                     {% endif %}
                 </div>
             </div>
         {% endfor %}
     {% elif submission.status == 'COMPILATION_ERROR' %}
-        {# For COMPILATION_ERROR, show the compiler's stderr (highlighted by Prism) #}
         <div class="alert alert-danger d-flex align-items-center" role="alert">
             <i class="bi bi-x-octagon-fill me-2 fs-4"></i>
             <div>
@@ -121,13 +117,13 @@
             Processing submission... This page will refresh automatically.
         </div>
     {% else %}
-        {# For other general statuses like INTERNAL_ERROR that might not have iterated test results #}
         <div class="alert alert-secondary" role="alert">
-            No detailed test case results available for this submission (Status: {{ submission.status.value|replace("_", " ")|title }}).
+            No detailed test case results available for this submission
+            (Status: {{ submission.status.value|replace("_", " ")|title }}).
             {% if submission.results and submission.results[0].stderr %}
-                 <p class="mb-1 mt-2">Error details:</p>
-                 {# Use Prism for this stderr, assuming it's system/compiler error not user program output #}
-                 <pre class="m-0"><code class="language-clike">{{ submission.results[0].stderr }}</code></pre>
+                <p class="mb-1 mt-2">Error details:</p>
+
+                <pre class="m-0"><code class="language-clike">{{ submission.results[0].stderr }}</code></pre>
             {% endif %}
         </div>
     {% endif %}

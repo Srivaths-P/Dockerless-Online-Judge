@@ -1,4 +1,5 @@
 import os
+
 from locust import HttpUser, task, between
 
 EXISTING_CONTEST_ID = os.getenv("LOCUST_CONTEST_ID", "sample_contest_1")

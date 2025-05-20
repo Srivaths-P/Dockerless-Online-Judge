@@ -86,7 +86,8 @@
                             {% for lang in problem.allowed_languages %}
                                 <option value="{{ lang }}"
                                         {% if loop.first %}selected{% endif %}
-                                        data-codemirror-mode="{% set lower_lang = lang.lower() %}{% if lower_lang == 'python' %}python{% elif lower_lang == 'c++' %}text/x-c++src{% elif lower_lang == 'c' %}text/x-csrc{% else %}clike{% endif %}">
+                                        data-codemirror-mode="
+                                                {% set lower_lang = lang.lower() %}{% if lower_lang == 'python' %}python{% elif lower_lang == 'c++' %}text/x-c++src{% elif lower_lang == 'c' %}text/x-csrc{% else %}clike{% endif %}">
                                     {{ lang|title }}
                                 </option>
                             {% endfor %}
@@ -152,21 +153,21 @@
                         "Esc": function (cm) {
                             if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
                         },
-                        "Tab": function(cm) {
+                        "Tab": function (cm) {
                             if (cm.somethingSelected()) {
                                 cm.indentSelection("add");
                             } else {
-                                cm.replaceSelection(cm.getOption("indentWithTabs")? "\t" :
+                                cm.replaceSelection(cm.getOption("indentWithTabs") ? "\t" :
                                     Array(cm.getOption("indentUnit") + 1).join(" "));
                             }
                         },
-                        "Shift-Tab": function(cm) {
+                        "Shift-Tab": function (cm) {
                             cm.indentSelection("subtract");
                         }
                     }
                 });
 
-                editor.on('change', function(instance) {
+                editor.on('change', function (instance) {
                     codeTextarea.value = instance.getValue();
                 });
                 editor.on('blur', function (instance) {
@@ -186,12 +187,12 @@
                     if (editor) {
                         editor.setOption("mode", selectedMode);
                     } else {
-                         initializeEditor(selectedMode);
+                        initializeEditor(selectedMode);
                     }
                 });
 
                 if (submissionForm) {
-                    submissionForm.addEventListener('submit', function() {
+                    submissionForm.addEventListener('submit', function () {
                         if (editor) {
                             codeTextarea.value = editor.getValue();
                         }

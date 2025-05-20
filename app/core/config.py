@@ -1,9 +1,7 @@
 import os
-from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
-from pydantic import Field
 
 load_dotenv()
 
@@ -19,5 +17,6 @@ class Settings(BaseSettings):
         env_file = ".env"
         if not os.path.exists(".env") and os.path.exists("../.env"):
             env_file = "../.env"
+
 
 settings = Settings()
