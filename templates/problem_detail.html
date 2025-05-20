@@ -86,8 +86,7 @@
                             {% for lang in problem.allowed_languages %}
                                 <option value="{{ lang }}"
                                         {% if loop.first %}selected{% endif %}
-                                        data-codemirror-mode="
-                                                {% set lower_lang = lang.lower() %}{% if lower_lang == 'python' %}python{% elif lower_lang == 'c++' %}text/x-c++src{% elif lower_lang == 'c' %}text/x-csrc{% else %}clike{% endif %}">
+                                        data-codemirror-mode="{% set lower_lang = lang.lower() %}{% if lower_lang == 'python' %}python{% elif lower_lang == 'c++' %}text/x-c++src{% elif lower_lang == 'c' %}text/x-csrc{% else %}clike{% endif %}">
                                     {{ lang|title }}
                                 </option>
                             {% endfor %}
