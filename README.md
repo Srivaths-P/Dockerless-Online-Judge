@@ -11,7 +11,7 @@ An online judge system built with FastAPI, Jinja2, SQLite, Nginx, and a robust s
 *   Asynchronous submission processing via an `asyncio` queue and worker pool.
 *   View submission results (status, execution time, memory usage, stdout/stderr).
 *   Test case generator: Users can request sample input/output for problems with defined generator scripts, executed in a sandbox.
-*   Database for users (with rate limit tracking) and submissions (SQLite with Alembic for migrations). WAL enabled for SQLite for improved concurrency.
+*   Database for users (with rate limit tracking) and submissions (SQLite with Alembic for migrations). Write-Ahead Logging (WAL) enabled for SQLite for improved concurrency.
 *   Comprehensive JSON-based logging of user activity and submission lifecycle events for analytics.
 *   Responsive UI built with Bootstrap 5 and Jinja2 templates.
 *   RESTful API for core functionalities.
