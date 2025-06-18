@@ -1,8 +1,8 @@
 import asyncio
 import os
-import resource
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import traceback
@@ -22,6 +22,57 @@ BWRAP = "/usr/bin/bwrap"
 PYTHON3 = "/usr/bin/python3"
 GCC = "/usr/bin/gcc"
 GPP = os.getenv("GPP_PATH", "/usr/bin/g++")
+
+WRAPPER_SCRIPT = """
+import os
+import resource
+import sys
+import time
+
+command = sys.argv[1:]
+
+stdin_path = '/sandbox/input.txt'
+stdout_path = '/sandbox/results/user.stdout'
+stderr_path = '/sandbox/results/user.stderr'
+res_log_path = '/sandbox/res.log'
+
+if os.path.exists(stdin_path):
+    stdin_fd = os.open(stdin_path, os.O_RDONLY)
+else:
+    stdin_fd = os.open(os.devnull, os.O_RDONLY)
+
+stdout_fd = os.open(stdout_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+stderr_fd = os.open(stderr_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+
+pid = os.fork()
+
+if pid == 0:
+    try:
+        os.dup2(stdin_fd, sys.stdin.fileno())
+        os.dup2(stdout_fd, sys.stdout.fileno())
+        os.dup2(stderr_fd, sys.stderr.fileno())
+        os.execv(command[0], command)
+    except Exception as e:
+        os.write(stderr_fd, f"Wrapper execv error: {e}".encode())
+        os._exit(127)
+else:
+    start_time = time.perf_counter()
+    _pid, status, rusage = os.wait4(pid, 0)
+    end_time = time.perf_counter()
+
+    wall_time_s = end_time - start_time
+    mem_kb = rusage.ru_maxrss
+    exit_code = os.waitstatus_to_exitcode(status)
+
+    with open(res_log_path, 'w') as f:
+        f.write(f"EXIT_CODE:{exit_code}\\n")
+        f.write(f"WALL_S:{wall_time_s:.4f}\\n")
+        f.write(f"MEM_KB:{mem_kb}\\n")
+
+    os.close(stdin_fd)
+    os.close(stdout_fd)
+    os.close(stderr_fd)
+"""
 
 LANGUAGE_CONFIG: Dict[str, Dict[str, Any]] = {
     "python": {
@@ -60,7 +111,6 @@ def _make_systemd_bwrap_cmd(
               "-p", f"RuntimeMaxSec={tlim}",
               "-p", "CPUQuota=100%",
               "-p", f"MemoryMax={mlim}M",
-              "-p", "MemoryAccounting=yes",
               BWRAP
           ] + bwrap_args
     return cmd
@@ -71,93 +121,33 @@ def _systemd_bwrap_run(
         tlim: int,
         mlim: int,
         bwrap_args: list,
-        stdin_path: Optional[str],
-        stdout_path: str,
-        stderr_path: str
 ) -> Dict[str, Any]:
-    os.makedirs(os.path.dirname(stdout_path), exist_ok=True)
-    os.makedirs(os.path.dirname(stderr_path), exist_ok=True)
-
     full_cmd = _make_systemd_bwrap_cmd(unit, tlim, mlim, bwrap_args)
+    subprocess.run(full_cmd, check=False)
 
-    stdin_file = None
-    stdout_file = None
-    stderr_file = None
-    execution_time_ns = 0
+    systemd_result_str = "unknown"
     try:
-        stdin_file = open(stdin_path, 'rb') if stdin_path else subprocess.DEVNULL
-        stdout_file = open(stdout_path, 'wb')
-        stderr_file = open(stderr_path, 'wb')
+        scope_unit_name = f"{unit}.scope"
+        show_cmd = ["systemctl", "show", "--user", scope_unit_name, "-p", "Result", "--value"]
+        res = subprocess.run(show_cmd, capture_output=True, text=True, check=False)
+        if res.returncode == 0:
+            systemd_result_str = res.stdout.strip()
+    except Exception as e:
+        print(f"Failed to get systemd result for {unit}: {e}")
 
-        start_time_ns = time.perf_counter_ns()
-        proc = subprocess.run(
-            full_cmd,
-            stdin=stdin_file,
-            stdout=stdout_file,
-            stderr=stderr_file
-        )
-        end_time_ns = time.perf_counter_ns()
-        execution_time_ns = end_time_ns - start_time_ns
-        exit_code = proc.returncode
+    subprocess.run(["systemctl", "--user", "reset-failed", f"{unit}.scope"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    subprocess.run(["systemctl", "--user", "stop", f"{unit}.scope"],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
-    finally:
-        if stdin_file and stdin_file != subprocess.DEVNULL:
-            stdin_file.close()
-        if stdout_file:
-            stdout_file.close()
-        if stderr_file:
-            stderr_file.close()
-
-    peak_rss_kb = -1
-    try:
-        usage = resource.getrusage(resource.RUSAGE_CHILDREN)
-        peak_rss_kb = usage.ru_maxrss
-    except Exception:
-        peak_rss_kb = -1
-
-    show = subprocess.run(
-        ["systemctl", "show", "-p", "Result", "--value", f"{unit}.scope"],
-        capture_output=True, text=True, check=False
-    )
-    systemd_result = show.stdout.strip() if show.returncode == 0 else "unknown"
-
-    mem_show = subprocess.run(
-        ["systemctl", "show", "-p", "MemoryPeak", "--value", f"{unit}.scope"],
-        capture_output=True, text=True, check=False
-    )
-    systemd_mem_bytes = -1
-    if mem_show.returncode == 0 and mem_show.stdout.strip().isdigit():
-        systemd_mem_bytes = int(mem_show.stdout.strip())
-
-    subprocess.run(
-        ["systemctl", "--user", "reset-failed", f"{unit}.scope"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
-    )
-    subprocess.run(
-        ["systemctl", "--user", "stop", f"{unit}.scope"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
-    )
-
-    final_mem_kb = int(systemd_mem_bytes / 1024) if systemd_mem_bytes > 0 else peak_rss_kb
-
-    return {
-        "systemd": systemd_result,
-        "exit": exit_code,
-        "mem_kb": final_mem_kb,
-        "time_ns": execution_time_ns
-    }
+    return {"systemd_result": systemd_result_str}
 
 
 def _diff_files(out_path: str, exp_path: str) -> int:
-    if not os.path.exists(out_path):
-        open(out_path, 'w').close()
-    if not os.path.exists(exp_path):
-        open(exp_path, 'w').close()
-    cp = subprocess.run(
-        ["diff", "-Z", "--strip-trailing-cr", "-q", out_path, exp_path],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True
-    )
-    return cp.returncode
+    if not os.path.exists(out_path): open(out_path, 'w').close()
+    if not os.path.exists(exp_path): open(exp_path, 'w').close()
+    return subprocess.run(["diff", "-Z", "--strip-trailing-cr", "-q", out_path, exp_path],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
 
 
 async def run_code_in_sandbox(
@@ -170,150 +160,85 @@ async def run_code_in_sandbox(
     lang = language.lower()
     cfg = LANGUAGE_CONFIG.get(lang)
     if not cfg:
-        return TestCaseResult(
-            test_case_name=test_case.name,
-            status=SubmissionStatus.INTERNAL_ERROR,
-            stderr=f"Unsupported language: {language}"
-        )
+        return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.INTERNAL_ERROR,
+                              stderr=f"Unsupported language: {language}")
 
-    td_prefix = f"judge_{submission_id.hex[:8]}_{test_case.name.replace(' ', '_')}_"
-    td = tempfile.mkdtemp(prefix=td_prefix)
+    td = tempfile.mkdtemp(prefix=f"judge_{submission_id.hex[:8]}_")
 
     try:
-        code_f = os.path.join(td, "user_code" + cfg["ext"])
-        in_f = os.path.join(td, "input.txt")
         results_dir = os.path.join(td, "results")
         os.makedirs(results_dir, exist_ok=True)
-        out_f = os.path.join(results_dir, f"{submission_id.hex}.out")
-        err_f = os.path.join(results_dir, f"{submission_id.hex}.err")
-        exp_f = os.path.join(results_dir, "expected.txt")
 
-        with open(code_f, 'w', encoding='utf-8') as f:
+        out_f = os.path.join(results_dir, "user.stdout")
+        err_f = os.path.join(results_dir, "user.stderr")
+        res_log_f = os.path.join(td, "res.log")
+        in_f = os.path.join(td, "input.txt")
+        exp_f = os.path.join(td, "expected.txt")
+        wrapper_f = os.path.join(td, "wrapper.py")
+
+        with open(os.path.join(td, "user_code" + cfg["ext"]), 'w') as f:
             f.write(code)
-
-        in_f_for_bwrap = None
+        with open(wrapper_f, 'w') as f:
+            f.write(WRAPPER_SCRIPT)
         if test_case.input_content is not None:
-            with open(in_f, 'w', encoding='utf-8') as f:
-                f.write(test_case.input_content)
-            in_f_for_bwrap = in_f
-
-        if test_case.output_content is not None:
-            with open(exp_f, 'w', encoding='utf-8') as f:
-                f.write(test_case.output_content)
-        elif not os.path.exists(exp_f):
-            open(exp_f, 'w').close()
-
-        stderr_msg = None
-        compilation_mem_kb = None
+            with open(in_f, 'w') as f: f.write(test_case.input_content)
+        with open(exp_f, 'w') as f:
+            f.write(test_case.output_content or "")
 
         if cfg["compile"]:
             unit_c = f"compile-{submission_id.hex[:8]}-{uuid.uuid4().hex[:4]}"
-            compile_out_f = os.path.join(results_dir, "compile.out")
-            compile_err_f = os.path.join(results_dir, "compile.err")
-            bwrap_args_c = [
-                               "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
-                               "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
-                               "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                               "--unshare-pid", "--unshare-net",
-                           ] + cfg["compile"]
-
+            bwrap_args_c = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
+                            "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
+                            "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
+                            "--unshare-pid", "--unshare-net"] + cfg["compile"]
             cres = await asyncio.get_running_loop().run_in_executor(
-                blocking_executor,
-                _systemd_bwrap_run,
-                unit_c, 30, 512,
-                bwrap_args_c,
-                None, compile_out_f, compile_err_f
+                blocking_executor, _systemd_bwrap_run, unit_c, 30, 512, bwrap_args_c
             )
-
-            compilation_mem_kb = cres.get("mem_kb", None)
-
-            if cres["systemd"] != "success" or cres["exit"] != 0:
-                if os.path.exists(compile_err_f):
-                    try:
-                        with open(compile_err_f, 'r', encoding='utf-8', errors='ignore') as ef:
-                            stderr_msg = ef.read(4096).strip()
-                    except Exception:
-                        stderr_msg = "Failed to read compiler error output."
-                else:
-                    stderr_msg = "Compilation failed (no error output file found)."
-
-                if cres["systemd"] == "timeout":
-                    stderr_msg = f"Compilation Timed Out ({stderr_msg})".strip()
-                elif cres["systemd"] in ("oom", "memory", "oom-kill"):
-                    stderr_msg = f"Compilation Memory Limit Exceeded ({stderr_msg})".strip()
-
-                return TestCaseResult(
-                    test_case_name=test_case.name,
-                    status=SubmissionStatus.COMPILATION_ERROR,
-                    stderr=stderr_msg,
-                    execution_time_ms=0.0,
-                    memory_used_kb=compilation_mem_kb
-                )
+            if cres.get("systemd_result") != "success":
+                return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.COMPILATION_ERROR,
+                                      stderr="Compilation failed (timeout, out of memory, or other error).")
 
         unit_e = f"exec-{submission_id.hex[:8]}-{uuid.uuid4().hex[:4]}"
-        bwrap_args_e = [
-                           "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
-                           "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
-                           "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                           "--unshare-pid", "--unshare-net",
-                       ] + cfg["run"]
+        command_to_wrap = cfg["run"]
+        bwrap_args_e = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
+                        "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
+                        "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
+                        "--unshare-pid", "--unshare-net",
+                        PYTHON3, "/sandbox/wrapper.py"] + command_to_wrap
 
         eres = await asyncio.get_running_loop().run_in_executor(
             blocking_executor, _systemd_bwrap_run, unit_e,
-            problem.time_limit_sec, problem.memory_limit_mb,
-            bwrap_args_e, in_f_for_bwrap, out_f, err_f
+            problem.time_limit_sec, problem.memory_limit_mb, bwrap_args_e
         )
-        exec_ns = eres.get("time_ns", 0)
-        sysd = eres["systemd"]
-        ret = eres["exit"]
-        mem_kb = eres.get("mem_kb", None)
-        exec_ms = round(exec_ns / 1_000_000, 2)
 
-        status = SubmissionStatus.INTERNAL_ERROR
+        exec_ms, mem_kb, exit_code = 0.0, 0, 0
+        try:
+            with open(res_log_f, 'r') as f:
+                for line in f:
+                    if line.startswith("EXIT_CODE:"): exit_code = int(line.strip().split(':')[1])
+                    if line.startswith("WALL_S:"): exec_ms = round(float(line.strip().split(':')[1]) * 1000, 2)
+                    if line.startswith("MEM_KB:"): mem_kb = int(line.strip().split(':')[1])
+        except (IOError, IndexError, ValueError):
+            pass
 
+        sysd = eres.get("systemd_result")
+        status: SubmissionStatus
         if sysd == "timeout":
             status = SubmissionStatus.TIME_LIMIT_EXCEEDED
             exec_ms = float(problem.time_limit_sec * 1000)
-        elif sysd in ("oom", "memory", "oom-kill"):
+        elif sysd == "oom-kill":
             status = SubmissionStatus.MEMORY_LIMIT_EXCEEDED
-        elif sysd == "success":
-            if ret != 0:
-                status = SubmissionStatus.RUNTIME_ERROR
-            else:
-                diffc = await asyncio.get_running_loop().run_in_executor(
-                    blocking_executor,
-                    _diff_files,
-                    out_f, exp_f
-                )
-                status = SubmissionStatus.ACCEPTED if diffc == 0 else SubmissionStatus.WRONG_ANSWER
-        elif sysd == "failed":
-            status = SubmissionStatus.RUNTIME_ERROR if ret != 0 else SubmissionStatus.INTERNAL_ERROR
+        elif exit_code != 0:
+            status = SubmissionStatus.RUNTIME_ERROR
         else:
-            status = SubmissionStatus.INTERNAL_ERROR
-            stderr_msg = f"Execution failed (systemd: {sysd}, exit: {ret})"
+            diffc = await asyncio.get_running_loop().run_in_executor(blocking_executor, _diff_files, out_f, exp_f)
+            status = SubmissionStatus.ACCEPTED if diffc == 0 else SubmissionStatus.WRONG_ANSWER
 
+        stderr_msg, stdout_content = None, None
         if os.path.exists(err_f):
-            try:
-                with open(err_f, 'r', encoding='utf-8', errors='ignore') as ef:
-                    stderr_content = ef.read(4096).strip()
-                if stderr_content:
-                    if stderr_msg:
-                        stderr_msg = f"{stderr_msg}\n---\n{stderr_content}"
-                    else:
-                        stderr_msg = stderr_content
-            except Exception:
-                if stderr_msg:
-                    stderr_msg = f"{stderr_msg}\n---\n(Failed to read stderr)"
-                else:
-                    stderr_msg = "(Failed to read stderr)"
-
-        stdout_content = None
+            with open(err_f, 'r', errors='ignore') as f: stderr_msg = f.read(4096).strip() or None
         if status == SubmissionStatus.WRONG_ANSWER and os.path.exists(out_f):
-            try:
-                with open(out_f, 'r', encoding='utf-8', errors='ignore') as of:
-                    stdout_content = of.read(4096).strip()
-            except Exception:
-                stdout_content = "(Failed to read stdout)"
+            with open(out_f, 'r', errors='ignore') as f: stdout_content = f.read(4096).strip() or None
 
         return TestCaseResult(
             test_case_name=test_case.name, status=status, stdout=stdout_content, stderr=stderr_msg,
@@ -321,128 +246,106 @@ async def run_code_in_sandbox(
         )
     except Exception as e:
         traceback.print_exc()
-        return TestCaseResult(
-            test_case_name=test_case.name, status=SubmissionStatus.INTERNAL_ERROR,
-            stderr=f"Sandbox setup/internal error: {type(e).__name__}: {e}",
-            execution_time_ms=0.0, memory_used_kb=None
-        )
+        return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.INTERNAL_ERROR,
+                              stderr=f"Sandbox critical error: {e}", execution_time_ms=0.0, memory_used_kb=0)
     finally:
         shutil.rmtree(td, ignore_errors=True)
 
 
 async def run_generator_in_sandbox(
-        problem_for_generator: Problem,
-        generator_language: str = "python"
+        problem: Problem,
+        language: str = "python"
 ) -> Dict[str, Any]:
-    lang = generator_language.lower()
+    lang = language.lower()
     cfg = LANGUAGE_CONFIG.get(lang)
     if not cfg:
         return {"input": None, "output": None,
-                "error": f"Unsupported generator language: {generator_language}",
+                "error": f"Unsupported generator language: {language}",
                 "status": "error"}
 
-    if not problem_for_generator.generator_code:
+    if not problem.generator_code:
         return {"input": None, "output": None,
                 "error": "Generator code not found in problem object.",
                 "status": "error"}
 
-    generator_code = problem_for_generator.generator_code
-
-    td_prefix = f"generator_{uuid.uuid4().hex[:8]}_"
-    td = tempfile.mkdtemp(prefix=td_prefix)
+    generator_code = problem.generator_code
+    td = tempfile.mkdtemp(prefix=f"generator_{uuid.uuid4().hex[:8]}_")
 
     try:
-        code_f = os.path.join(td, "user_code" + cfg["ext"])
         results_dir = os.path.join(td, "results")
         os.makedirs(results_dir, exist_ok=True)
-        out_f = os.path.join(results_dir, "generator.stdout")
-        err_f = os.path.join(results_dir, "generator.stderr")
+        out_f = os.path.join(results_dir, "user.stdout")
+        err_f = os.path.join(results_dir, "user.stderr")
+        res_log_f = os.path.join(td, "res.log")
+        wrapper_f = os.path.join(td, "wrapper.py")
 
-        with open(code_f, 'w', encoding='utf-8') as f:
+        with open(os.path.join(td, "user_code" + cfg["ext"]), 'w') as f:
             f.write(generator_code)
-
-        if cfg["compile"]:
-            return {"input": None, "output": None,
-                    "error": "Generator compilation not supported yet.",
-                    "status": "error"}
+        with open(wrapper_f, 'w') as f:
+            f.write(WRAPPER_SCRIPT)
 
         unit_g = f"gen-{uuid.uuid4().hex[:8]}"
-        bwrap_args_g = [
-                           "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
-                           "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
-                           "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                           "--unshare-pid", "--unshare-net",
-                       ] + cfg["run"]
+        command_to_wrap = cfg["run"]
+        bwrap_args_g = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
+                        "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
+                        "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
+                        "--unshare-pid", "--unshare-net",
+                        PYTHON3, "/sandbox/wrapper.py"] + command_to_wrap
 
-        g_tlim = problem_for_generator.generator_time_limit_sec
-        g_mlim = problem_for_generator.generator_memory_limit_mb
-
-        g_tlim = max(1, g_tlim)
+        g_tlim_sec = problem.generator_time_limit_sec or 5.0
+        g_mlim_mb = problem.generator_memory_limit_mb or 256
+        g_tlim_sec = max(1.0, g_tlim_sec)
 
         gres = await asyncio.get_running_loop().run_in_executor(
             blocking_executor, _systemd_bwrap_run, unit_g,
-            g_tlim, g_mlim,
-            bwrap_args_g, None, out_f, err_f
+            int(g_tlim_sec), g_mlim_mb, bwrap_args_g
         )
 
-        sysd = gres["systemd"]
-        ret = gres["exit"]
-        mem_kb = gres.get("mem_kb", None)
-        exec_ms = round(gres.get("time_ns", 0) / 1_000_000, 2)
+        exec_ms, mem_kb, exit_code = 0.0, 0, 0
+        try:
+            with open(res_log_f, 'r') as f:
+                for line in f:
+                    if line.startswith("EXIT_CODE:"): exit_code = int(line.strip().split(':')[1])
+                    if line.startswith("WALL_S:"): exec_ms = round(float(line.strip().split(':')[1]) * 1000, 2)
+                    if line.startswith("MEM_KB:"): mem_kb = int(line.strip().split(':')[1])
+        except (IOError, IndexError, ValueError):
+            pass
 
-        input_content = None
-        output_content = None
-        error_content = None
+        sysd = gres.get("systemd_result")
+        error_content: Optional[str] = None
+        status_reason = f"Systemd: {sysd}, Exit: {exit_code}, Time: {exec_ms}ms, Mem: {mem_kb}KB"
 
-        if os.path.exists(out_f):
-            try:
-                with open(out_f, 'r', encoding='utf-8', errors='ignore') as f:
-                    input_content = f.read(8192).strip()
-            except Exception as e:
-                input_content = f"(Failed to read generator stdout: {e})"
+        if sysd == "timeout":
+            error_content = f"Generator Timed Out ({g_tlim_sec}s). {status_reason}"
+        elif sysd == "oom-kill":
+            error_content = f"Generator Memory Limit Exceeded ({g_mlim_mb}MB). {status_reason}"
+        elif exit_code != 0:
+            error_content = f"Generator script exited with error code {exit_code}. {status_reason}"
 
-        if os.path.exists(err_f):
-            try:
-                with open(err_f, 'r', encoding='utf-8', errors='ignore') as f:
-                    output_content = f.read(8192).strip()
-            except Exception as e:
-                output_content = f"(Failed to read generator stderr: {e})"
-
-        if sysd != "success" or ret != 0:
-            status_reason = f"Systemd: {sysd}, Exit Code: {ret}, Time: {exec_ms}ms, Mem: {mem_kb}KB"
-            if sysd == "timeout":
-                error_content = f"Generator Timed Out ({g_tlim}s). {status_reason}"
-            elif sysd in ("oom", "memory", "oom-kill"):
-                error_content = f"Generator Memory Limit Exceeded ({g_mlim}MB). {status_reason}"
-            elif sysd == "failed" and ret != 0:
-                error_content = f"Generator execution command failed. {status_reason}"
-            elif ret != 0:
-                error_content = f"Generator script exited with error code {ret}. {status_reason}"
-                if output_content:
-                    error_content += f"\n---\nGenerator Script Error Output:\n{output_content}"
-            else:
-                error_content = f"Generator execution failed unexpectedly. {status_reason}"
-
-            input_content = None
-            output_content = None
+        input_content, output_content = None, None
+        if not error_content:
+            if os.path.exists(out_f):
+                with open(out_f, 'r', errors='ignore') as f: input_content = f.read(8192).strip() or None
+            if os.path.exists(err_f):
+                with open(err_f, 'r', errors='ignore') as f: output_content = f.read(8192).strip() or None
+        elif os.path.exists(err_f):
+            with open(err_f, 'r', errors='ignore') as f:
+                script_error = f.read(4096).strip()
+                if script_error:
+                    error_content += f"\n---\nGenerator Script Error Output:\n{script_error}"
 
         return {
-            "input": input_content,
-            "output": output_content,
-            "error": error_content,
-            "execution_time_ms": exec_ms,
-            "memory_used_kb": mem_kb,
+            "input": input_content, "output": output_content, "error": error_content,
+            "execution_time_ms": exec_ms, "memory_used_kb": mem_kb,
             "status": "success" if error_content is None else "error"
         }
-
     except Exception as e:
         traceback.print_exc()
         return {
             "input": None, "output": None,
-            "error": f"Generator sandbox critical error: {type(e).__name__}: {e}",
-            "execution_time_ms": 0.0, "memory_used_kb": None, "status": "internal_error"
+            "error": f"Generator sandbox critical error: {e}",
+            "execution_time_ms": 0.0, "memory_used_kb": 0, "status": "internal_error"
         }
-
     finally:
         shutil.rmtree(td, ignore_errors=True)
 

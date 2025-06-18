@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Online Judge",
+    title="DOJ",
     lifespan=lifespan
 )
 

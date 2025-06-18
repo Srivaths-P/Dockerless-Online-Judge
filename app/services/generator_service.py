@@ -61,8 +61,8 @@ async def generate_sample_testcase(
         db.commit()
 
         generator_result = await run_generator_in_sandbox(
-            problem_for_generator=problem,
-            generator_language="python"
+            problem=problem,
+            language="python"
         )
 
         log_user_event(user_id=current_user.id, user_email=current_user.email,

@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
-    <title>{% block title %}Online Judge{% endblock %}</title>
+    <title>{% block title %}DOJ{% endblock %}</title>
+
+    <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}">
 
     <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
           integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" rel="stylesheet">
@@ -180,7 +182,7 @@
 <body class="d-flex flex-column h-100">
 <nav class="navbar navbar-expand-md navbar-dark fixed-top bg-dark shadow-sm">
     <div class="container-fluid">
-        <a class="navbar-brand" href="{{ url_for('ui_home') }}">Online Judge</a>
+        <a class="navbar-brand" href="{{ url_for('ui_home') }}">DOJ</a>
         <button aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation"
                 class="navbar-toggler"
                 data-bs-target="#navbarCollapse" data-bs-toggle="collapse" type="button">
@@ -250,7 +252,7 @@
 
 <footer class="footer mt-auto py-3 bg-dark text-light border-top border-secondary-subtle">
     <div class="container text-center">
-        <span class="text-muted">Online Judge © {{ G.datetime_class.now().year if G is defined and G.datetime_class is defined else '____' }}</span>
+        <span class="text-muted">DOJ © {{ G.datetime_class.now().year if G is defined and G.datetime_class is defined else '____' }}</span>
     </div>
 </footer>
 

@@ -235,21 +235,21 @@
 
                             if (response.ok) {
                                 const result = await response.json();
-                                if (result.status !== 'error' && result.error === null) {
-                                    generatorInputPre.textContent = result.input || 'No input generated.';
-                                    generatorOutputPre.textContent = result.output || 'No output generated.';
+                                if (result.error === null) {
+                                    generatorInputPre.textContent = result.input || '(No input generated)';
+                                    generatorOutputPre.textContent = result.output || '(No output generated)';
                                     generatorErrorDiv.classList.add('d-none');
                                     console.log("Generator Success:", result);
                                 } else {
                                     generatorInputPre.textContent = 'Generation process failed.';
-                                    generatorOutputPre.textContent = 'Generation process failed.';
-                                    generatorErrorDiv.textContent = `Error: ${result.error || 'Sandbox error occurred.'}`;
+                                    generatorOutputPre.textContent = 'See error below.';
+                                    generatorErrorDiv.textContent = `Error: ${result.error || 'An unknown sandbox error occurred.'}`;
                                     generatorErrorDiv.classList.remove('d-none');
                                     console.error("Generator Sandbox Error:", result);
                                 }
                             } else {
                                 generatorInputPre.textContent = 'Generation failed.';
-                                generatorOutputPre.textContent = 'Generation failed.';
+                                generatorOutputPre.textContent = 'See error below.';
                                 let errorDetail = `HTTP Error ${response.status}: ${response.statusText}`;
                                 try {
                                     const errorJson = await response.json();
@@ -265,8 +265,8 @@
                         } catch (error) {
                             generatorResultsDiv.classList.remove('d-none');
                             generatorInputPre.textContent = 'Generation failed.';
-                            generatorOutputPre.textContent = 'Generation failed.';
-                            generatorErrorDiv.textContent = `Request failed: ${error}`;
+                            generatorOutputPre.textContent = 'See error below.';
+                            generatorErrorDiv.textContent = `Client-side request failed: ${error}`;
                             generatorErrorDiv.classList.remove('d-none');
                             console.error("Generator Fetch Error:", error);
                         } finally {
