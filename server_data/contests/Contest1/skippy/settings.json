@@ -1,0 +1,8 @@
+{
+  "title": "Puppy Loving Pacifist",
+  "time_limit_sec": 1,
+  "memory_limit_mb": 64,
+  "allowed_languages": ["c++"],
+  "submission_cooldown_sec": 10,
+  "generator_cooldown_sec": 5
+}

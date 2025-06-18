@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
-    <title>{% block title %}DOJ{% endblock %}</title>
+    <title>{% block title %}Online Judge{% endblock %}</title>
 
     <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}">
 
@@ -182,7 +182,7 @@
 <body class="d-flex flex-column h-100">
 <nav class="navbar navbar-expand-md navbar-dark fixed-top bg-dark shadow-sm">
     <div class="container-fluid">
-        <a class="navbar-brand" href="{{ url_for('ui_home') }}">DOJ</a>
+        <a class="navbar-brand" href="{{ url_for('ui_home') }}">Online Judge</a>
         <button aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation"
                 class="navbar-toggler"
                 data-bs-target="#navbarCollapse" data-bs-toggle="collapse" type="button">
@@ -252,7 +252,7 @@
 
 <footer class="footer mt-auto py-3 bg-dark text-light border-top border-secondary-subtle">
     <div class="container text-center">
-        <span class="text-muted">DOJ © {{ G.datetime_class.now().year if G is defined and G.datetime_class is defined else '____' }}</span>
+        <span class="text-muted">Online Judge © {{ G.datetime_class.now().year if G is defined and G.datetime_class is defined else '____' }}</span>
     </div>
 </footer>
 
@@ -270,6 +270,28 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/edit/closebrackets.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/selection/active-line.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/display/fullscreen.min.js"></script>
-{% block extra_js %}{% endblock %}
+
+{% block extra_js %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const elements = document.querySelectorAll('.utc-to-local');
+            const options = {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
+            };
+            elements.forEach(function (el) {
+                const utcDateString = el.getAttribute('data-datetime');
+                if (utcDateString) {
+                    try {
+                        const localDate = new Date(utcDateString);
+                        el.textContent = localDate.toLocaleString(undefined, options);
+                    } catch (e) {
+                        console.error("Could not parse date:", utcDateString);
+                    }
+                }
+            });
+        });
+    </script>
+{% endblock %}
 </body>
 </html>

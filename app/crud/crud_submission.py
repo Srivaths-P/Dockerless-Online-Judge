@@ -64,6 +64,19 @@ class CRUDSubmission(CRUDBase[Submission, SubmissionCreate, SubmissionUpdate]):
             .all()
         )
 
+    def get_user_submissions_for_contest(
+        self, db: Session, *, submitter_id: int, contest_id: str
+    ) -> List[Submission]:
+        return (
+            db.query(self.model)
+            .filter(
+                Submission.submitter_id == submitter_id,
+                Submission.contest_id == contest_id
+            )
+            .order_by(self.model.submitted_at.asc())
+            .all()
+        )
+
     def update_submission_results(
             self,
             db: Session,

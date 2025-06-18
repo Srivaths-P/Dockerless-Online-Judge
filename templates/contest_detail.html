@@ -1,4 +1,3 @@
-{# templates/contest_detail.html #}
 {% extends "base.html" %}
 
 {% block title %}{{ contest.title }} - Online Judge{% endblock %}
@@ -17,12 +16,9 @@
         </div>
         {% if contest.start_time %}
             <p class="text-muted mb-1"><small>
-                Starts: {{ contest.start_time.strftime('%Y-%m-%d %H:%M %Z') }}
+                Starts: <span class="utc-to-local" data-datetime="{{ contest.start_time.isoformat() }}">{{ contest.start_time.strftime('%d-%m-%Y %H:%M %Z') }}</span>
                 {% if contest.duration_minutes is not none %}
-                    | Duration: {{ contest.duration_minutes }} minutes
-                    (
-                    {{ (contest.start_time + G.timedelta_class(minutes=contest.duration_minutes)).strftime('%Y-%m-%d %H:%M %Z') }}
-                    End)
+                    | Ends: <span class="utc-to-local" data-datetime="{{ (contest.start_time + G.timedelta_class(minutes=contest.duration_minutes)).isoformat() }}">{{ (contest.start_time + G.timedelta_class(minutes=contest.duration_minutes)).strftime('%d-%m-%Y %H:%M %Z') }}</span>
                 {% endif %}
             </small></p>
         {% endif %}
@@ -36,7 +32,14 @@
     </div>
 
     <h3 class="mt-5 mb-3">Problems</h3>
-    {% if contest.problems %}
+
+    {% if 'Upcoming' in contest.status %}
+        <div class="text-center p-5 mt-4">
+            <i class="bi bi-lock-fill fs-1 text-muted mb-3"></i>
+            <h4 class="text-muted">Contest has not started</h4>
+            <p class="text-muted">The problems will be shown once contest begins.</p>
+        </div>
+    {% elif contest.problems %}
         <div class="list-group shadow-sm">
             {% for problem in contest.problems %}
                 <div class="list-group-item list-group-item-action">
@@ -46,14 +49,11 @@
                             <small class="text-muted">Problem ID: {{ problem.id }}</small>
                         </div>
                         <div>
-                            {# Placeholder for last submission status icon/text #}
-                            {# Example:
-                {% if problem.user_status == 'ACCEPTED' %}
-                <span class="badge bg-success me-2"><i class="bi bi-check-circle-fill"></i> Solved</span>
-                {% elif problem.user_status %}
-                <span class="badge bg-warning text-dark me-2"><i class="bi bi-exclamation-triangle-fill"></i> Attempted</span>
-                {% endif %}
-                #}
+                            {% if problem.user_status == 'ACCEPTED' %}
+                                <span class="badge bg-success me-2"><i class="bi bi-check-circle-fill"></i> Solved</span>
+                            {% elif problem.user_status == 'ATTEMPTED' %}
+                                <span class="badge bg-warning text-dark me-2"><i class="bi bi-exclamation-triangle-fill"></i> Attempted</span>
+                            {% endif %}
                             <a class="btn btn-sm btn-primary"
                                href="{{ url_for('ui_problem_detail', contest_id=contest.id, problem_id=problem.id) }}">
                                 Solve <i class="bi bi-arrow-right-short"></i>

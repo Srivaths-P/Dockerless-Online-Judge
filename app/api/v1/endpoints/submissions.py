@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.db import models as db_models
 from app.schemas.submission import SubmissionCreate, Submission as SubmissionSchema, SubmissionInfo
-from app.services import submission_service
+from app.services import contest_service, submission_service
 
 router = APIRouter()
 
@@ -17,6 +17,10 @@ async def create_new_submission(
         db: Session = Depends(deps.get_db),
         current_user: db_models.User = Depends(deps.get_current_active_user)
 ):
+    contest_service.check_contest_access_and_get_problem(
+        contest_id=submission_in.contest_id, problem_id=submission_in.problem_id
+    )
+
     try:
         submission_info = await submission_service.create_submission(
             db=db,

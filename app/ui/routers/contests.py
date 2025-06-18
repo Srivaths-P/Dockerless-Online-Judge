@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_303_SEE_OTHER
 
 from app.core.logging_config import log_user_event
+from app.crud import crud_submission
 from app.db import models as db_models
 from app.db.session import get_db
 from app.services import contest_service
@@ -17,33 +18,40 @@ router = APIRouter()
 
 def get_ui_contest_status(contest: contest_service.ContestMinimal):
     now = datetime.now(timezone.utc)
-    if contest.start_time:
-        if now < contest.start_time:
-            time_diff = contest.start_time - now
-            time_diff = max(time_diff, timedelta(seconds=0))
-            days = time_diff.days
-            hours = time_diff.seconds // 3600
-            minutes = (time_diff.seconds % 3600) // 60
-            if days > 0:
-                return f"Upcoming (Starts in {days}d {hours}h)"
-            elif hours > 0:
-                return f"Upcoming (Starts in {hours}h {minutes}m)"
-            else:
-                return f"Upcoming (Starts in {minutes}m)"
+    if not contest.start_time:
+        return "Active"
 
-        if contest.duration_minutes is not None:
-            end_time = contest.start_time + timedelta(minutes=contest.duration_minutes)
-            if now >= contest.start_time and now < end_time:
-                time_diff = end_time - now
-                time_diff = max(time_diff, timedelta(seconds=0))
+    if now < contest.start_time:
+        time_diff = contest.start_time - now
+        days = time_diff.days
+        if days > 1:
+            return f"Upcoming: Starts in {days} days"
+
+        hours = time_diff.seconds // 3600
+        minutes = (time_diff.seconds % 3600) // 60
+        if hours > 0:
+            return f"Upcoming: Starts in {hours}h {minutes}m"
+        return f"Upcoming: Starts in {minutes}m"
+
+    if contest.duration_minutes is not None:
+        end_time = contest.start_time + timedelta(minutes=contest.duration_minutes)
+        if now < end_time:
+            time_diff = end_time - now
+            days = time_diff.days
+
+            if days > 365:
+                years = days // 365
+                return f"Active: Ends in ~{years} year(s)"
+            elif days > 1:
+                hours = time_diff.seconds // 3600
+                return f"Active: Ends in {days}d {hours}h"
+            else:
                 hours = time_diff.seconds // 3600
                 minutes = (time_diff.seconds % 3600) // 60
-                seconds = time_diff.seconds % 60
-                return f"Active (Ends in {hours}h {minutes}m {seconds}s)"
-            elif now >= end_time:
-                return "Ended"
+                return f"Active: Ends in {hours}h {minutes}m"
         else:
-            return "Active"
+            return "Ended"
+
     return "Active"
 
 
@@ -86,9 +94,28 @@ async def contest_detail(request: Request, contest_id: str,
     if not contest:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Contest not found")
 
-    status_str = get_ui_contest_status(contest)
     contest_dict = contest.model_dump()
+    status_str = get_ui_contest_status(contest)
     contest_dict['status'] = status_str
+
+    is_upcoming = "Upcoming" in status_str
+
+    if not is_upcoming:
+        user_submissions = crud_submission.submission.get_user_submissions_for_contest(
+            db, submitter_id=current_user.id, contest_id=contest_id
+        )
+
+        problem_statuses = {}
+        for sub in user_submissions:
+            if sub.status == "ACCEPTED":
+                problem_statuses[sub.problem_id] = "ACCEPTED"
+            elif sub.problem_id not in problem_statuses:
+                problem_statuses[sub.problem_id] = "ATTEMPTED"
+
+        for problem in contest_dict["problems"]:
+            problem["user_status"] = problem_statuses.get(problem["id"], None)
+    else:
+        contest_dict["problems"] = []
 
     log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="contest_view",
                    details={"contest_id": contest_id})
@@ -107,9 +134,14 @@ async def problem_detail(request: Request, contest_id: str, problem_id: str,
         flash(request, "Please login to view problem details.", "warning")
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
 
-    problem = contest_service.get_problem_by_id(contest_id, problem_id)
-    if not problem:
-        raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Problem not found")
+    try:
+        problem = contest_service.check_contest_access_and_get_problem(
+            contest_id=contest_id, problem_id=problem_id, allow_ended=True
+        )
+    except HTTPException as e:
+        flash(request, str(e.detail), "danger")
+        return RedirectResponse(url=request.url_for("ui_contest_detail", contest_id=contest_id),
+                                status_code=HTTP_303_SEE_OTHER)
 
     contest = contest_service.get_contest_by_id(contest_id)
 

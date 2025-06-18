@@ -1,1 +1,0 @@
-# Sample contest 1

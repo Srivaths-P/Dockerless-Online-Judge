@@ -10,7 +10,7 @@ from app.core.logging_config import log_user_event
 from app.db import models as db_models
 from app.db.session import get_db
 from app.schemas.submission import SubmissionCreate
-from app.services import submission_service
+from app.services import contest_service, submission_service
 from app.ui.deps import get_current_user_from_cookie, flash
 
 router = APIRouter()
@@ -29,6 +29,13 @@ async def handle_submission(
     if not current_user:
         flash(request, "Please login to submit.", "warning")
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=status.HTTP_303_SEE_OTHER)
+
+    try:
+        contest_service.check_contest_access_and_get_problem(contest_id=contest_id, problem_id=problem_id)
+    except HTTPException as e:
+        flash(request, f"Submission failed: {e.detail}", "danger")
+        return RedirectResponse(url=request.url_for("ui_problem_detail", contest_id=contest_id, problem_id=problem_id),
+                                status_code=status.HTTP_303_SEE_OTHER)
 
     submission_data = SubmissionCreate(
         problem_id=problem_id, contest_id=contest_id, language=language, code=code

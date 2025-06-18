@@ -3,6 +3,7 @@ import os
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
 
+from fastapi import HTTPException, status
 from app.schemas.contest import Contest, ContestMinimal
 from app.schemas.problem import Problem, ProblemMinimal, TestCase
 
@@ -206,3 +207,25 @@ def get_contest_status(contest: ContestMinimal) -> str:
         else:
             return "Active"
     return "Active"
+
+
+def check_contest_access_and_get_problem(
+        contest_id: str, problem_id: str, allow_ended: bool = True
+) -> Problem:
+    contest = get_contest_by_id(contest_id)
+    if not contest:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contest not found")
+
+    problem = get_problem_by_id(contest_id, problem_id)
+    if not problem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+
+    contest_status = get_contest_status(contest)
+
+    if contest_status == "Upcoming":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contest has not started yet.")
+
+    if contest_status == "Ended" and not allow_ended:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contest has ended.")
+
+    return problem
