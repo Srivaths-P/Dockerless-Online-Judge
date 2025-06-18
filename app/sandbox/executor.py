@@ -185,41 +185,25 @@ async def run_code_in_sandbox(
 
         if cfg["compile"]:
             unit_c = f"compile-{submission_id.hex[:8]}-{uuid.uuid4().hex[:4]}"
+
+            compile_wrapper_script = WRAPPER_SCRIPT.replace("'/sandbox/input.txt'", "'/dev/null'")
+
+            with open(wrapper_f, 'w') as f:
+                f.write(compile_wrapper_script)
+
             bwrap_args_c = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
                             "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
                             "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                            "--unshare-pid", "--unshare-net"] + cfg["compile"]
+                            "--unshare-pid", "--unshare-net",
+                            PYTHON3, "/sandbox/wrapper.py"] + cfg["compile"]
 
             cres = await asyncio.get_running_loop().run_in_executor(
                 blocking_executor, _systemd_bwrap_run, unit_c, 30, 512, bwrap_args_c
             )
 
-            compile_err_f = os.path.join(results_dir, "compile.stderr")
-            compile_log_f = os.path.join(td, "compile_res.log")
-
-            compile_wrapper_script = WRAPPER_SCRIPT.replace(
-                "'/sandbox/results/user.stdout'", f"'/dev/null'"
-            ).replace(
-                "'/sandbox/results/user.stderr'", f"'{os.path.join('/sandbox/results', 'compile.stderr')}'"
-            ).replace(
-                "'/sandbox/res.log'", f"'/sandbox/compile_res.log'"
-            )
-            with open(wrapper_f, 'w') as f:
-                f.write(compile_wrapper_script)
-
-            bwrap_args_c_wrapped = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
-                                    "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
-                                    "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                                    "--unshare-pid", "--unshare-net",
-                                    PYTHON3, "/sandbox/wrapper.py"] + cfg["compile"]
-
-            cres = await asyncio.get_running_loop().run_in_executor(
-                blocking_executor, _systemd_bwrap_run, unit_c, 30, 512, bwrap_args_c_wrapped
-            )
-
             compile_exit_code = -1
             try:
-                with open(compile_log_f, 'r') as f:
+                with open(res_log_f, 'r') as f:
                     for line in f:
                         if line.startswith("EXIT_CODE:"):
                             compile_exit_code = int(line.strip().split(':')[1])
@@ -228,8 +212,8 @@ async def run_code_in_sandbox(
 
             if cres.get("systemd_result") != "success" or compile_exit_code != 0:
                 compile_stderr = ""
-                if os.path.exists(compile_err_f):
-                    with open(compile_err_f, 'r', errors='ignore') as f:
+                if os.path.exists(err_f):
+                    with open(err_f, 'r', errors='ignore') as f:
                         compile_stderr = f.read(4096).strip()
                 if cres.get("systemd_result") == "timeout":
                     compile_stderr = "Compilation Timed Out.\n" + compile_stderr
@@ -332,8 +316,10 @@ async def run_generator_in_sandbox(
 
         with open(os.path.join(td, "user_code" + cfg["ext"]), 'w') as f:
             f.write(generator_code)
+
+        gen_wrapper_script = WRAPPER_SCRIPT.replace("'/sandbox/input.txt'", "'/dev/null'")
         with open(wrapper_f, 'w') as f:
-            f.write(WRAPPER_SCRIPT)
+            f.write(gen_wrapper_script)
 
         unit_g = f"gen-{uuid.uuid4().hex[:8]}"
         command_to_wrap = cfg["run"]
@@ -479,7 +465,10 @@ class SubmissionProcessingQueue:
             final_results: List[TestCaseResult] = []
             overall_status = SubmissionStatus.ACCEPTED
 
-            for i, tc in enumerate(sorted(problem.test_cases, key=lambda x: x.name)):
+            # Sort test cases for deterministic execution order
+            sorted_test_cases = sorted(problem.test_cases, key=lambda tc: tc.name)
+
+            for tc in sorted_test_cases:
                 try:
                     res = await run_code_in_sandbox(
                         submission_id=uuid.UUID(submission_id),
