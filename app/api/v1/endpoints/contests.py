@@ -1,3 +1,5 @@
+import os
+import signal
 import traceback
 from typing import List, Dict, Optional
 
@@ -21,10 +23,10 @@ async def reload_contest_data(
     _: bool = Depends(verify_reload_key)
 ):
     try:
-        print(f"ADMIN ACTION: Graceful worker reload triggered.")
-        with open("/tmp/gunicorn_doj_reload.sig", "w") as f:
-            f.write("reload")
-        return {"message": "Graceful worker reload initiated."}
+        master_pid = os.getppid()
+        print(f"ADMIN ACTION: Sending SIGHUP to Gunicorn master (PID: {master_pid}) for graceful reload.")
+        os.kill(master_pid, signal.SIGHUP)
+        return {"message": "Graceful worker reload initiated successfully."}
     except Exception as e:
         print(f"API Error triggering reload: {e}")
         traceback.print_exc()

@@ -18,7 +18,7 @@ from app.api.v1.api import api_router as api_v1_router
 from app.core.config import settings
 from app.db.session import get_db
 from app.sandbox.executor import submission_processing_queue
-from app.services.contest_service import load_contests_on_startup
+from app.services.contest_service import load_server_data
 from app.ui.deps import get_current_user_from_cookie, get_flashed_messages, flash
 from app.ui.routers import auth as ui_auth_router
 from app.ui.routers import contests as ui_contests_router
@@ -28,11 +28,6 @@ from app.ui.routers import submissions as ui_submissions_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Application startup sequence initiated...")
-    print("Loading contests...")
-
-    load_contests_on_startup()
-
-    print("Contests loaded.")
     print("Starting submission queue workers...")
 
     try:

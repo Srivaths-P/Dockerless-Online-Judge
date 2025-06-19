@@ -111,7 +111,7 @@ def _load_problem(contest_id: str, problem_id: str, problem_path: str) -> Option
     )
 
 
-def load_contests_on_startup():
+def load_server_data():
     global _contests_db
     _contests_db = {}
     if not os.path.exists(CONTESTS_PATH):
