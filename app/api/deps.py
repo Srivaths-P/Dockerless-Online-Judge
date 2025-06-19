@@ -58,10 +58,10 @@ async def get_current_active_user(
 async def verify_reload_key(
         auth: HTTPAuthorizationCredentials = Depends(bearer_scheme)
 ) -> bool:
-    if not settings.ADMIN_RELOAD_KEY:
+    if not settings.ADMIN_RELOAD_TOKEN:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Reload key not configured.")
 
-    if auth.scheme != "Bearer" or auth.credentials != settings.ADMIN_RELOAD_KEY:
+    if auth.scheme != "Bearer" or auth.credentials != settings.ADMIN_RELOAD_TOKEN:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing reload key",

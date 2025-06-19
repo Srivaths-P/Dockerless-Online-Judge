@@ -18,11 +18,11 @@ Contests and problems are defined through a simple filesystem structure, making 
 *   **Multi-language Support:** Out-of-the-box support for `C++`, `C`, and `Python`. The architecture is easily extendable to other languages.
 *   **Secure Sandboxed Execution:** A multi-layered security model to safely run untrusted code:
     *   **Resource Enforcement (`systemd`):** Hard limits on wall-clock time (TLE), memory usage (MLE), and process count (preventing fork bombs) are enforced at the kernel level using cgroups managed by `systemd`.
-    *   **Filesystem & Network Isolation (`bubblewrap`):** User code is executed in a tightly sealed container with no network access (`--unshare-net`) and a read-only view of essential system libraries. It can only read its input and write to its designated output files.
-*   **Accurate Resource Measurement:** A dependency-free Python wrapper script uses the `os.fork()` and `os.wait4()` syscalls to precisely measure the wall-clock time and peak memory usage of user submissions, providing results consistent with professional judging platforms.
-*   **Asynchronous Judging:** Submissions are pushed to a high-performance `asyncio` queue and processed by a pool of background workers, ensuring the web interface remains fast and responsive under load.
+    *   **Filesystem & Network Isolation (`bubblewrap`):** User code is executed in a tightly sealed container with no network access (`--unshare-net`) and a read-only view of essential system libraries.
+*   **Accurate Resource Measurement:** A dependency-free Python wrapper script uses the `os.fork()` and `os.wait4()` syscalls to precisely measure the wall-clock time and peak memory usage of user submissions.
+*   **Asynchronous Judging:** Submissions are pushed to a high-performance `asyncio` queue and processed by a pool of background workers, ensuring the web interface remains fast and responsive.
 *   **Contest Lifecycle Management:** Full support for `Upcoming`, `Active`, and `Ended` contest states, with access controls to hide problems before a contest starts and block submissions after it ends.
-*   **Test Case Generator:** Problems can include a `generator.py` script. Users can request a sample test case (input/output) via the UI, which is securely executed in the same sandboxing environment.
+*   **Test Case Generator:** Problems can include a `generator.py` script that users can trigger from the UI to see sample test cases.
 *   **Comprehensive Logging:** Detailed JSON logs track user activity, submission lifecycle events, and generator requests for auditing and analytics.
 *   **RESTful API:** A well-defined API for core functionalities like submitting code, checking submission status, and retrieving problem details.
 
@@ -31,13 +31,13 @@ Contests and problems are defined through a simple filesystem structure, making 
 DOJ is built on a layered architecture to ensure separation of concerns and security.
 
 1.  **Web & API Layer (FastAPI):** Handles all HTTP requests, serves the Jinja2 frontend, provides the RESTful JSON API, and manages user authentication.
-2.  **Application Logic Layer:** Contains service functions (`submission_service`, `contest_service`, etc.). On a new submission, it performs validation, creates a database record, and enqueues the submission ID.
-3.  **Asynchronous Judging Layer (`asyncio`):** A pool of worker tasks continuously pulls submission IDs from the queue and orchestrates the judging process for each one.
+2.  **Application Logic Layer:** Contains service functions. On a new submission, it validates the request, creates a database record, and enqueues the submission ID.
+3.  **Asynchronous Judging Layer (`asyncio`):** A pool of worker tasks continuously pulls submission IDs from the queue and orchestrates the judging process.
 4.  **Sandboxing & Measurement Layer:**
     *   **Enforcer (`systemd`):** A transient `systemd` scope applies non-negotiable cgroup limits for Time, Memory, and Processes.
     *   **Isolator (`bubblewrap`):** Inside the `systemd` scope, `bubblewrap` creates the final sandboxed environment with a minimal, read-only filesystem and no network.
     *   **Measurer (`wrapper.py`):** A dynamically-generated Python script uses `os.fork()` and `os.wait4()` to execute the user's code and precisely measure its wall-clock time and peak memory usage.
-    *   **Collector:** The main application reads the measurement results and the `systemd` exit status to determine the final verdict (Accepted, Wrong Answer, TLE, etc.).
+    *   **Collector:** The main application reads the measurement results and the `systemd` exit status to determine the final verdict.
 
 ## Getting Started
 
@@ -92,9 +92,9 @@ DOJ is built on a layered architecture to ensure separation of concerns and secu
 
 To add or update contests and problems on a live server without requiring a full application restart, you can use the secure admin reload endpoint.
 
-### Prerequisite: Set the Reload Key
+### Prerequisite: Set the Reload Token
 
-This feature requires you to set the `ADMIN_RELOAD_KEY` variable in your `.env` file.
+This feature requires you to set the `ADMIN_RELOAD_TOKEN` variable in your `.env` file.
 
 1.  Generate a strong, random token:
     ```bash
@@ -109,14 +109,14 @@ This feature requires you to set the `ADMIN_RELOAD_KEY` variable in your `.env` 
 
 1.  **Update Server Data:** First, update the files on your server inside the `server_data/contests/` directory. You can do this using `git pull`, `scp`, `rsync`, or by manually editing the files.
 
-2.  **Trigger the Reload:** Next, from your server's command line (or any machine), use `curl` to send a POST request to the reload endpoint, providing your static token as a Bearer token.
+2.  **Trigger the Reload:** Next, from your server's command line, use `curl` to send a POST request to the reload endpoint, providing your static token as a Bearer token.
     ```bash
     # Replace YOUR_STATIC_TOKEN_HERE with the value from your .env file
     curl -X POST "https://doj.sriv.in/api/v1/contests/reload" \
          -H "Authorization: Bearer YOUR_STATIC_TOKEN_HERE"
     ```
 
-3.  **Verify:** If successful, the server will respond with `{"message":"Contest data reload initiated successfully."}`. The new contest data is now live.
+3.  **Verify:** If successful, the server will respond with `{"message":"Graceful worker reload initiated successfully."}`. The new contest data is now live.
 
 ## Contest & Problem Format
 
@@ -140,6 +140,31 @@ server_data/
 ```
 See the example contests in the `server_data` directory for more clarity.
 
+### `settings.json` examples
+
+**Contest `settings.json`:**
+```json
+{
+  "title": "My First Contest",
+  "start_time": "2024-01-01T00:00:00Z",
+  "duration_minutes": 120
+}
+```
+
+**Problem `settings.json`:**
+```json
+{
+  "title": "A + B",
+  "time_limit_sec": 1,
+  "memory_limit_mb": 64,
+  "allowed_languages": ["python", "c++"],
+  "submission_cooldown_sec": 10,
+  "generator_cooldown_sec": 5,
+  "generator_time_limit_sec": 2,
+  "generator_memory_limit_mb": 128
+}
+```
+
 ## Roadmap
 
 *   **Core Judge:**
@@ -154,3 +179,7 @@ See the example contests in the `server_data` directory for more clarity.
     *   Admin dashboard for managing users and contests.
     *   Support for PostgreSQL as a production database backend.
     *   Official deployment guides and scripts.
+
+## Contributing
+
+Contributions are welcome! Please feel free to open an issue to discuss a new feature or submit a pull request for a bug fix.
