@@ -2,6 +2,7 @@
 
 {% block title %}{{ problem.title }} - Online Judge{% endblock %}
 
+
 {% block content %}
     <div class="problem-view-container">
         <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
@@ -81,20 +82,23 @@
                       id="submissionForm"
                       method="post">
 
-                    <!-- START OF UPDATED DROPDOWN -->
-                    <div class="mb-3 d-flex align-items-center">
-                        <label class="form-label me-3 mb-0" for="languageSelect">Language:</label>
-                        <select class="form-select form-select-sm" id="languageSelect" name="language" style="width: auto; min-width: 150px;">
-                            {% for lang in problem.allowed_languages %}
-                                <option value="{{ lang }}"
-                                        {% if loop.first %}selected{% endif %}
-                                        data-codemirror-mode="{% set lower_lang = lang.lower() %}{% if lower_lang == 'python' %}python{% elif lower_lang == 'c++' %}text/x-c++src{% elif lower_lang == 'c' %}text/x-csrc{% else %}clike{% endif %}">
-                                    {{ lang|title }}
-                                </option>
-                            {% endfor %}
-                        </select>
+                    <div class="mb-3 d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center">
+                            <label class="form-label me-3 mb-0" for="languageSelect">Language:</label>
+                            <select class="form-select form-select-sm" id="languageSelect" name="language" style="width: auto; min-width: 150px;">
+                                {% for lang in problem.allowed_languages %}
+                                    <option value="{{ lang }}"
+                                            {% if loop.first %}selected{% endif %}
+                                            data-codemirror-mode="{% set lower_lang = lang.lower() %}{% if lower_lang == 'python' %}python{% elif lower_lang == 'c++' %}text/x-c++src{% elif lower_lang == 'c' %}text/x-csrc{% else %}clike{% endif %}">
+                                        {{ lang|title }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="clearCodeBtn">
+                            <i class="bi bi-eraser"></i> Reset Code
+                        </button>
                     </div>
-                    <!-- END OF UPDATED DROPDOWN -->
 
                     <div class="mb-3">
                         <label class="form-label" for="codeTextarea">Code:</label>
@@ -114,6 +118,7 @@
 {% block extra_js %}
     {{ super() }}
 
+
     <script>
         let editor;
 
@@ -121,6 +126,40 @@
             const codeTextarea = document.getElementById('codeTextarea');
             const languageSelect = document.getElementById('languageSelect');
             const submissionForm = document.getElementById('submissionForm');
+            const clearBtn = document.getElementById('clearCodeBtn');
+
+            const storageKey = `doj-code-{{ contest_id }}-{{ problem.id }}`;
+            const langStorageKey = `doj-lang-{{ contest_id }}-{{ problem.id }}`;
+
+            function saveCode() {
+                if (editor) {
+                    localStorage.setItem(storageKey, editor.getValue());
+                    localStorage.setItem(langStorageKey, languageSelect.value);
+                }
+            }
+
+            function loadCode() {
+                const savedCode = localStorage.getItem(storageKey);
+                const savedLang = localStorage.getItem(langStorageKey);
+
+                if (savedLang) {
+                    languageSelect.value = savedLang;
+                }
+
+                if (savedCode) {
+                    codeTextarea.value = savedCode;
+                    if (editor) {
+                        editor.setValue(savedCode);
+                    }
+                }
+            }
+
+            clearBtn.addEventListener('click', function() {
+                if (editor) {
+                    editor.setValue("");
+                    editor.focus();
+                }
+            });
 
             function getCodeMirrorMode(selectedLanguageValue) {
                 const selectedOption = Array.from(languageSelect.options).find(opt => opt.value === selectedLanguageValue);
@@ -150,32 +189,23 @@
                     tabSize: 4,
                     indentWithTabs: false,
                     extraKeys: {
-                        "F11": function (cm) {
-                            cm.setOption("fullScreen", !cm.getOption("fullScreen"));
+                        "F11": function (cm) { cm.setOption("fullScreen", !cm.getOption("fullScreen")); },
+                        "Esc": function (cm) { if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false); },
+                        "Tab": function(cm) {
+                            if (cm.somethingSelected()) { cm.indentSelection("add"); }
+                            else { cm.replaceSelection(cm.getOption("indentWithTabs") ? "\\t" : Array(cm.getOption("indentUnit") + 1).join(" ")); }
                         },
-                        "Esc": function (cm) {
-                            if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false);
-                        },
-                        "Tab": function (cm) {
-                            if (cm.somethingSelected()) {
-                                cm.indentSelection("add");
-                            } else {
-                                cm.replaceSelection(cm.getOption("indentWithTabs") ? "\t" :
-                                    Array(cm.getOption("indentUnit") + 1).join(" "));
-                            }
-                        },
-                        "Shift-Tab": function (cm) {
-                            cm.indentSelection("subtract");
-                        }
+                        "Shift-Tab": function(cm) { cm.indentSelection("subtract"); }
                     }
                 });
 
-                editor.on('change', function (instance) {
-                    codeTextarea.value = instance.getValue();
+                let timeout;
+                editor.on('change', function () {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(saveCode, 300);
                 });
-                editor.on('blur', function (instance) {
-                    codeTextarea.value = instance.getValue();
-                });
+
+                editor.on('blur', saveCode);
 
                 if (codeTextarea.value) {
                     editor.setValue(codeTextarea.value);
@@ -183,6 +213,7 @@
             }
 
             if (codeTextarea && languageSelect) {
+                loadCode();
                 initializeEditor(getCodeMirrorMode(languageSelect.value));
 
                 languageSelect.addEventListener('change', function () {
@@ -192,6 +223,7 @@
                     } else {
                         initializeEditor(selectedMode);
                     }
+                    saveCode();
                 });
 
                 if (submissionForm) {
