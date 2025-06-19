@@ -16,43 +16,47 @@ from app.ui.deps import get_current_user_from_cookie, flash
 router = APIRouter()
 
 
-def get_ui_contest_status(contest: contest_service.ContestMinimal):
+def get_contest_status(contest: contest_service.ContestMinimal):
     now = datetime.now(timezone.utc)
     if not contest.start_time:
-        return "Active"
+        return "Active", "Active"
+
+    # --- START OF NEW, UNIFIED LOGIC ---
+    def format_timedelta(td: timedelta, prefix: str) -> str:
+        """Helper function to format time remaining in a consistent way."""
+        seconds = int(td.total_seconds())
+
+        days = seconds // 86400
+        if days > 365:
+            years = days // 365
+            return f"{prefix} in ~{years} year(s)"
+        if days > 1:
+            hours = (seconds % 86400) // 3600
+            return f"{prefix} in {days}d {hours}h"
+
+        hours = seconds // 3600
+        if hours > 0:
+            minutes = (seconds % 3600) // 60
+            return f"{prefix} in {hours}h {minutes}m"
+
+        minutes = seconds // 60
+        if minutes > 0:
+            secs = seconds % 60
+            return f"{prefix} in {minutes}m {secs}s"
+
+        return f"{prefix} in {seconds}s"
 
     if now < contest.start_time:
-        time_diff = contest.start_time - now
-        days = time_diff.days
-        if days > 1:
-            return f"Upcoming: Starts in {days} days"
-
-        hours = time_diff.seconds // 3600
-        minutes = (time_diff.seconds % 3600) // 60
-        if hours > 0:
-            return f"Upcoming: Starts in {hours}h {minutes}m"
-        return f"Upcoming: Starts in {minutes}m"
+        return "Upcoming", format_timedelta(contest.start_time - now, "Starts")
 
     if contest.duration_minutes is not None:
         end_time = contest.start_time + timedelta(minutes=contest.duration_minutes)
         if now < end_time:
-            time_diff = end_time - now
-            days = time_diff.days
-
-            if days > 365:
-                years = days // 365
-                return f"Active: Ends in ~{years} year(s)"
-            elif days > 1:
-                hours = time_diff.seconds // 3600
-                return f"Active: Ends in {days}d {hours}h"
-            else:
-                hours = time_diff.seconds // 3600
-                minutes = (time_diff.seconds % 3600) // 60
-                return f"Active: Ends in {hours}h {minutes}m"
+            return "Active", format_timedelta(end_time - now, "Ends")
         else:
-            return "Ended"
+            return "Ended", "Ended"
 
-    return "Active"
+    return "Active", "Active"
 
 
 @router.get("/", response_class=HTMLResponse, name="ui_list_contests")
@@ -64,21 +68,38 @@ async def list_contests(request: Request,
         flash(request, "Please login to view contests.", "warning")
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
 
-    contests = contest_service.get_all_contests()
+    all_contests = contest_service.get_all_contests()
 
-    contests_with_status = []
-    for contest in contests:
-        status_str = get_ui_contest_status(contest)
+    upcoming_contests = []
+    active_contests = []
+    ended_contests = []
+
+    for contest in all_contests:
+        category, status_str = get_contest_status(contest)
         contest_dict = contest.model_dump()
-        contest_dict['status'] = status_str
-        contests_with_status.append(contest_dict)
+        contest_dict['status_str'] = status_str
+
+        if category == "Upcoming":
+            upcoming_contests.append(contest_dict)
+        elif category == "Active":
+            active_contests.append(contest_dict)
+        else:
+            ended_contests.append(contest_dict)
+
+    upcoming_contests.sort(key=lambda c: c.get('start_time') or datetime.now(timezone.utc))
+    active_contests.sort(key=lambda c: c.get('start_time') or datetime.now(timezone.utc), reverse=True)
+    ended_contests.sort(key=lambda c: c.get('start_time') or datetime.now(timezone.utc), reverse=True)
 
     log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="contest_list_view")
 
     from app.main import templates
-    return templates.TemplateResponse("contests_list.html",
-                                      {"request": request, "contests": contests_with_status,
-                                       "current_user": current_user})
+    return templates.TemplateResponse("contests_list.html", {
+        "request": request,
+        "upcoming_contests": upcoming_contests,
+        "active_contests": active_contests,
+        "ended_contests": ended_contests,
+        "current_user": current_user
+    })
 
 
 @router.get("/{contest_id}", response_class=HTMLResponse, name="ui_contest_detail")
@@ -95,10 +116,11 @@ async def contest_detail(request: Request, contest_id: str,
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Contest not found")
 
     contest_dict = contest.model_dump()
-    status_str = get_ui_contest_status(contest)
-    contest_dict['status'] = status_str
+    category, status_str = get_contest_status(contest)
+    contest_dict['status_str'] = status_str
+    contest_dict['category'] = category
 
-    is_upcoming = "Upcoming" in status_str
+    is_upcoming = category == "Upcoming"
 
     if not is_upcoming:
         user_submissions = crud_submission.submission.get_user_submissions_for_contest(

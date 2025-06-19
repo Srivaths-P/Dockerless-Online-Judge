@@ -1,7 +1,7 @@
 from typing import Generator, Optional
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.db.session import SessionLocal
 from app.schemas.token import TokenData
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token")
+bearer_scheme = HTTPBearer()
 
 
 def get_db() -> Generator:
@@ -52,3 +53,17 @@ async def get_current_active_user(
     if not crud_user.user.is_active(current_user):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Inactive user")
     return current_user
+
+
+async def verify_reload_key(
+        auth: HTTPAuthorizationCredentials = Depends(bearer_scheme)
+) -> bool:
+    if not settings.ADMIN_RELOAD_KEY:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Reload key not configured.")
+
+    if auth.scheme != "Bearer" or auth.credentials != settings.ADMIN_RELOAD_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing reload key",
+        )
+    return True

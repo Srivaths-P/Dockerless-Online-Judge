@@ -7,9 +7,8 @@
         <div class="d-flex justify-content-between align-items-center">
             <h2 class="display-6 mb-0">{{ contest.title }}</h2>
             <div>
-                {% set status = contest.status %}
-                {% set status_class = 'bg-info text-dark' if 'Upcoming' in status else ('bg-success' if 'Active' in status else ('bg-secondary' if status == 'Ended' else 'bg-warning')) %}
-                <span class="badge {{ status_class }} me-2">{{ status }}</span>
+                {% set status_class = 'bg-info text-dark' if contest.category == 'Upcoming' else ('bg-success' if contest.category == 'Active' else 'bg-secondary') %}
+                <span class="badge {{ status_class }} me-2">{{ contest.status_str }}</span>
                 <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('ui_list_contests') }}"><i
                         class="bi bi-arrow-left"></i> All Contests</a>
             </div>
@@ -33,11 +32,11 @@
 
     <h3 class="mt-5 mb-3">Problems</h3>
 
-    {% if 'Upcoming' in contest.status %}
+    {% if contest.category == 'Upcoming' %}
         <div class="text-center p-5 mt-4">
             <i class="bi bi-lock-fill fs-1 text-muted mb-3"></i>
             <h4 class="text-muted">Contest has not started</h4>
-            <p class="text-muted">The problems will be shown once contest begins.</p>
+            <p class="text-muted">The problems will be shown once the contest begins.</p>
         </div>
     {% elif contest.problems %}
         <div class="list-group shadow-sm">

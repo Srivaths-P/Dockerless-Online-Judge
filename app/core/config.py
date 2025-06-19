@@ -9,6 +9,7 @@ load_dotenv()
 class Settings(BaseSettings):
     SECRET_KEY: str
     SESSION_SECRET_KEY: str
+    ADMIN_RELOAD_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     DATABASE_URL: str

@@ -87,7 +87,22 @@ templates.env.globals["G"] = {"datetime_class": datetime, "timedelta_class": tim
 
 def markdown_filter(text):
     if text is None: return ""
-    return markdown.markdown(text, extensions=["fenced_code", "tables", "sane_lists", "extra", "codehilite"])
+    return markdown.markdown(
+        text,
+        extensions=[
+            "fenced_code",
+            "tables",
+            "sane_lists",
+            "extra",
+            "codehilite",
+            "pymdownx.arithmatex"
+
+        ], extension_configs={
+            "pymdownx.arithmatex": {
+                "generic": True
+            }
+        }
+    )
 
 
 templates.env.filters["markdown"] = markdown_filter

@@ -11,8 +11,23 @@ from app.schemas.problem import Problem
 from app.services import contest_service
 from app.services import generator_service
 from app.ui.deps import get_current_user_from_cookie
+from app.api.deps import verify_reload_key
 
 router = APIRouter()
+
+
+@router.post("/reload", status_code=status.HTTP_202_ACCEPTED)
+async def reload_contest_data(
+    is_authorized: bool = Depends(verify_reload_key)
+):
+    try:
+        print(f"ADMIN ACTION: Contest data reload triggered by authorized token.")
+        contest_service.load_contests_on_startup()
+        return {"message": "Contest data reload initiated successfully."}
+    except Exception as e:
+        print(f"API Error reloading contest data: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reload contest data.")
 
 
 @router.get("/", response_model=List[ContestMinimal])
