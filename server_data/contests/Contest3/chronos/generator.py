@@ -16,4 +16,4 @@ else:
     s = half + mid + half[::-1]
 
 print(s)
-print(f'{'YES' if s == s[::-1] else 'NO'}', file=sys.stderr)
+print(f"{'YES' if s == s[::-1] else 'NO'}", file=sys.stderr)
