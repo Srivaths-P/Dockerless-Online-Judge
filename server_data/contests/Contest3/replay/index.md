@@ -1,20 +1,30 @@
 ## Task
 
-Zero has lost all sense of time and is desperately trying to figure out if he's in a time loop.
+Zero wants to create a command that creates a palindrome to make sure he's not losing track of time. Unfortunately, he has only a limited number of letters available.
 
-A time loop is guaranteed if the string he reads is the same when reversed.
+He has to use all the letters he has, or the psychiatrist will find out that he is not taking his medication.
 
-Since he's too dizzy, he wants you to tell him if the given string is a palindrome.
+Tell Zero how to create a palindrome using the letters he has, or tell him that it is impossible.
 
 ### Input Format
 
-The input will consist of a single line containing a string $S$ representing the command.
+The first line contains an array of integers $A$, where each integer represents the frequency of the corresponding letter in the alphabet.
 
 ### Output Format
 
-Print "YES" if the string is a palindrome, otherwise print "NO".
+Print any palindrome that can be created using the given frequency of letters. If it is not possible to create a palindrome, print `-1`.
 
 ### Constraints
 
-*   $1 \leq |S| \leq 10^5$, where $|S|$ is the length of the string $S$.
-*   $S$ will only consist of lowercase or uppercase latin letters.
+*  $|A| = 26$
+*   $1 \leq \sum A_i \leq 10^5$.
+
+### Sample Input
+```
+4 0 0 0 0 2 0 0 0 1 0 0 0 2 2 0 0 2 0 2 2 0 0 0 0 0
+```
+
+### Sample Output
+```
+anutforajaroftuna
+```
