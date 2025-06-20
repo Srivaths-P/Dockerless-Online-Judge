@@ -55,7 +55,7 @@ async def get_current_active_user(
     return current_user
 
 
-async def verify_reload_key(
+async def verify_reload_token(
         auth: HTTPAuthorizationCredentials = Depends(bearer_scheme)
 ) -> bool:
     if not settings.ADMIN_RELOAD_TOKEN:

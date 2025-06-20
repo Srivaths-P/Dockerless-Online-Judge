@@ -6,31 +6,46 @@ from typing import List, Dict, Optional
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, verify_reload_token
+from app.ui.deps import get_current_user_from_cookie
 from app.db import models as db_models
 from app.schemas.contest import Contest, ContestMinimal
-from app.schemas.problem import Problem
+from app.schemas.problem import Problem, ProblemPublic
 from app.services import contest_service
 from app.services import generator_service
-from app.ui.deps import get_current_user_from_cookie
-from app.api.deps import verify_reload_key
 
 router = APIRouter()
 
 
 @router.post("/reload", status_code=status.HTTP_202_ACCEPTED)
 async def reload_contest_data(
-    _: bool = Depends(verify_reload_key)
+    _: bool = Depends(verify_reload_token)
 ):
-    try:
-        master_pid = os.getppid()
-        print(f"ADMIN ACTION: Sending SIGHUP to Gunicorn master (PID: {master_pid}) for graceful reload.")
-        os.kill(master_pid, signal.SIGHUP)
-        return {"message": "Graceful worker reload initiated successfully."}
-    except Exception as e:
-        print(f"API Error triggering reload: {e}")
-        traceback.print_exc()
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to trigger reload.")
+    if 'GUNICORN_PID' in os.environ:
+        try:
+            master_pid = os.getppid()
+            print(f"ADMIN ACTION: Gunicorn environment detected. Sending SIGHUP to master (PID: {master_pid}).")
+            os.kill(master_pid, signal.SIGHUP)
+            return {"message": "Graceful worker reload signal sent to Gunicorn master.", "method": "sighup"}
+        except Exception as e:
+            print(f"API Error attempting to signal Gunicorn master: {e}")
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to signal Gunicorn for reload. Check server logs."
+            )
+    else:
+        try:
+            print("ADMIN ACTION: Non-Gunicorn environment detected. Reloading data in-memory.")
+            contest_service.load_server_data()
+            return {"message": "Contest data reloaded directly in memory.", "method": "direct_call"}
+        except Exception as e:
+            print(f"API Error attempting to reload data directly: {e}")
+            traceback.print_exc()
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to reload contest data directly. Check server logs."
+            )
 
 
 @router.get("/", response_model=List[ContestMinimal])
@@ -48,7 +63,7 @@ async def read_contest(contest_id: str,
     return contest
 
 
-@router.get("/{contest_id}/problems/{problem_id}", response_model=Problem)
+@router.get("/{contest_id}/problems/{problem_id}", response_model=ProblemPublic)
 async def read_problem_details(
         contest_id: str,
         problem_id: str,
@@ -57,7 +72,11 @@ async def read_problem_details(
     problem = contest_service.check_contest_access_and_get_problem(
         contest_id=contest_id, problem_id=problem_id, allow_ended=True
     )
-    return problem
+
+    return ProblemPublic(
+        **problem.model_dump(),
+        generator_available=bool(problem.generator_code)
+    )
 
 
 @router.post("/{contest_id}/problems/{problem_id}/generate_testcase", response_model=Dict[str, Optional[str]])
@@ -65,14 +84,8 @@ async def generate_problem_testcase(
         contest_id: str,
         problem_id: str,
         db: Session = Depends(get_db),
-        current_user: Optional[db_models.User] = Depends(get_current_user_from_cookie)
+        current_user: db_models.User = Depends(get_current_user_from_cookie)
 ) -> Dict[str, Optional[str]]:
-    if current_user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated (cookie missing or invalid)"
-        )
-
     try:
         contest_service.check_contest_access_and_get_problem(
             contest_id=contest_id, problem_id=problem_id, allow_ended=True

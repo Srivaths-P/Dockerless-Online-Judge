@@ -23,11 +23,21 @@ from app.ui.deps import get_current_user_from_cookie, get_flashed_messages, flas
 from app.ui.routers import auth as ui_auth_router
 from app.ui.routers import contests as ui_contests_router
 from app.ui.routers import submissions as ui_submissions_router
+from app.services import contest_service
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Application startup sequence initiated...")
+
+    if 'GUNICORN_PID' not in os.environ:
+        try:
+            print("ADMIN ACTION: Non-Gunicorn environment detected. Reloading data in-memory.")
+            contest_service.load_server_data()
+        except Exception as e:
+            print(f"Error attempting to reload data directly: {e}")
+            traceback.print_exc()
+
     print("Starting submission queue workers...")
 
     try:

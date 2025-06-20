@@ -16,49 +16,6 @@ from app.ui.deps import get_current_user_from_cookie, flash
 router = APIRouter()
 
 
-def get_contest_status(contest: contest_service.ContestMinimal):
-    now = datetime.now(timezone.utc)
-    if not contest.start_time:
-        return "Active", "Active"
-
-    # --- START OF NEW, UNIFIED LOGIC ---
-    def format_timedelta(td: timedelta, prefix: str) -> str:
-        """Helper function to format time remaining in a consistent way."""
-        seconds = int(td.total_seconds())
-
-        days = seconds // 86400
-        if days > 365:
-            years = days // 365
-            return f"{prefix} in ~{years} year(s)"
-        if days > 1:
-            hours = (seconds % 86400) // 3600
-            return f"{prefix} in {days}d {hours}h"
-
-        hours = seconds // 3600
-        if hours > 0:
-            minutes = (seconds % 3600) // 60
-            return f"{prefix} in {hours}h {minutes}m"
-
-        minutes = seconds // 60
-        if minutes > 0:
-            secs = seconds % 60
-            return f"{prefix} in {minutes}m {secs}s"
-
-        return f"{prefix} in {seconds}s"
-
-    if now < contest.start_time:
-        return "Upcoming", format_timedelta(contest.start_time - now, "Starts")
-
-    if contest.duration_minutes is not None:
-        end_time = contest.start_time + timedelta(minutes=contest.duration_minutes)
-        if now < end_time:
-            return "Active", format_timedelta(end_time - now, "Ends")
-        else:
-            return "Ended", "Ended"
-
-    return "Active", "Active"
-
-
 @router.get("/", response_class=HTMLResponse, name="ui_list_contests")
 async def list_contests(request: Request,
                         current_user: Optional[db_models.User] = Depends(get_current_user_from_cookie),
@@ -75,7 +32,7 @@ async def list_contests(request: Request,
     ended_contests = []
 
     for contest in all_contests:
-        category, status_str = get_contest_status(contest)
+        category, status_str = contest_service.get_contest_status_details(contest)
         contest_dict = contest.model_dump()
         contest_dict['status_str'] = status_str
 
@@ -116,7 +73,7 @@ async def contest_detail(request: Request, contest_id: str,
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Contest not found")
 
     contest_dict = contest.model_dump()
-    category, status_str = get_contest_status(contest)
+    category, status_str = contest_service.get_contest_status_details(contest)
     contest_dict['status_str'] = status_str
     contest_dict['category'] = category
 

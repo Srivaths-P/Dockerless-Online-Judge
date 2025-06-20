@@ -118,6 +118,7 @@ def load_server_data():
         print(f"Warning: Contests directory not found at {CONTESTS_PATH}")
         return
 
+    print(os.listdir(CONTESTS_PATH))
     for contest_id in os.listdir(CONTESTS_PATH):
         contest_path = os.path.join(CONTESTS_PATH, contest_id)
         if not os.path.isdir(contest_path):
@@ -168,6 +169,7 @@ def load_server_data():
 
         setattr(contest_obj, '_full_problems', {p.id: p for p in parsed_problems_in_contest_full})
         _contests_db[contest_id] = contest_obj
+
     print(f"Loaded {len(_contests_db)} contests.")
 
 
@@ -193,24 +195,54 @@ def get_problem_by_id(contest_id: str, problem_id: str) -> Optional[Problem]:
     return None
 
 
-def get_contest_status(contest: ContestMinimal) -> str:
+def get_contest_status_details(contest: ContestMinimal) -> (str, str):
     now = datetime.now(timezone.utc)
-    if contest.start_time:
-        if now < contest.start_time:
-            return "Upcoming"
-        if contest.duration_minutes is not None:
-            end_time = contest.start_time + timedelta(minutes=contest.duration_minutes)
-            if now >= contest.start_time and now < end_time:
-                return "Active"
-            elif now >= end_time:
-                return "Ended"
+    if not contest.start_time:
+        return "Active", "Active"
+
+    def format_timedelta(td: timedelta, prefix: str) -> str:
+        seconds = int(td.total_seconds())
+
+        days = seconds // 86400
+        if days > 365:
+            years = days // 365
+            return f"{prefix} in ~{years} year(s)"
+        if days > 1:
+            hours = (seconds % 86400) // 3600
+            return f"{prefix} in {days}d {hours}h"
+
+        hours = seconds // 3600
+        if hours > 0:
+            minutes = (seconds % 3600) // 60
+            return f"{prefix} in {hours}h {minutes}m"
+
+        minutes = seconds // 60
+        if minutes > 0:
+            secs = seconds % 60
+            return f"{prefix} in {minutes}m {secs}s"
+
+        return f"{prefix} in {seconds}s"
+
+    if now < contest.start_time:
+        return "Upcoming", format_timedelta(contest.start_time - now, "Starts")
+
+    if contest.duration_minutes is not None:
+        end_time = contest.start_time + timedelta(minutes=contest.duration_minutes)
+        if now < end_time:
+            return "Active", format_timedelta(end_time - now, "Ends")
         else:
-            return "Active"
-    return "Active"
+            return "Ended", "Ended"
+
+    return "Active", "Active"
+
+
+def get_contest_category(contest: ContestMinimal) -> str:
+    category, _ = get_contest_status_details(contest)
+    return category
 
 
 def check_contest_access_and_get_problem(
-        contest_id: str, problem_id: str, allow_ended: bool = True
+        contest_id: str, problem_id: str, allow_ended: bool = False
 ) -> Problem:
     contest = get_contest_by_id(contest_id)
     if not contest:
@@ -220,12 +252,12 @@ def check_contest_access_and_get_problem(
     if not problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
 
-    contest_status = get_contest_status(contest)
+    contest_category = get_contest_category(contest)
 
-    if contest_status == "Upcoming":
+    if contest_category == "Upcoming":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contest has not started yet.")
 
-    if contest_status == "Ended" and not allow_ended:
+    if contest_category == "Ended" and not allow_ended:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contest has ended.")
 
     return problem
