@@ -14,7 +14,7 @@ from app.schemas.submission import (
     SubmissionCreate, SubmissionStatus, SubmissionInfo, TestCaseResult,
     Submission as SubmissionSchema
 )
-from app.services.contest_service import get_problem_by_id
+from app.services.contest_service import check_submission
 
 DEFAULT_SUBMISSION_COOLDOWN_SEC = 10
 
@@ -26,7 +26,11 @@ async def create_submission(
 ) -> SubmissionInfo:
     print(f"Service: create_submission called by user {current_user.email} for problem {submission_data.problem_id}")
 
-    problem = get_problem_by_id(submission_data.contest_id, submission_data.problem_id)
+    problem = check_submission(
+        contest_id=submission_data.contest_id,
+        problem_id=submission_data.problem_id
+    )
+
     if not problem:
         print(f"Service: Problem not found: {submission_data.contest_id}/{submission_data.problem_id}")
         log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_create_failed",

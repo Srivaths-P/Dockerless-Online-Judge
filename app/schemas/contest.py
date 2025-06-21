@@ -12,6 +12,7 @@ class ContestBase(BaseModel):
     description_md: Optional[str] = None
     start_time: Optional[datetime] = None
     duration_minutes: Optional[int] = None
+    allow_upsolving: bool = True
 
     class Config:
         from_attributes = True

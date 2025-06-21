@@ -289,7 +289,7 @@
                                 let errorDetail = `HTTP Error ${response.status}: ${response.statusText}`;
                                 try {
                                     const errorJson = await response.json();
-                                    errorDetail = `Error (${response.status}): ${errorJson.detail || response.statusText}`;
+                                    errorDetail = `Generator Error: ${errorJson.detail || response.statusText}`;
                                 } catch (e) {
                                     console.warn("Failed to parse error response as JSON, using statusText.");
                                 }

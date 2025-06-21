@@ -114,8 +114,8 @@ async def problem_detail(request: Request, contest_id: str, problem_id: str,
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
 
     try:
-        problem = contest_service.check_contest_access_and_get_problem(
-            contest_id=contest_id, problem_id=problem_id, allow_ended=True
+        problem = contest_service.get_contest_problem(
+            contest_id=contest_id, problem_id=problem_id
         )
     except HTTPException as e:
         flash(request, str(e.detail), "danger")

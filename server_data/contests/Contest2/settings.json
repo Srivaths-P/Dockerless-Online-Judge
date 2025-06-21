@@ -1,5 +1,6 @@
 {
   "title": "Hollow Knight",
   "start_time": "2021-08-28T00:00:00Z",
-  "duration_minutes": 343440
+  "duration_minutes": 343440,
+  "allow_upsolving": false
 }

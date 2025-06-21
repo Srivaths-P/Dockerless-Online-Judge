@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.logging_config import log_user_event
 from app.db import models as db_models
 from app.sandbox.executor import run_generator_in_sandbox
-from app.services.contest_service import get_problem_by_id
+from app.services.contest_service import check_submission
 
 DEFAULT_GENERATOR_COOLDOWN_SEC = 10
 
@@ -24,12 +24,7 @@ async def generate_sample_testcase(
     log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="generator_request",
                    details={"contest_id": contest_id, "problem_id": problem_id})
 
-    problem = get_problem_by_id(contest_id, problem_id)
-    if not problem:
-        print(f"Service: Problem not found: {contest_id}/{problem_id}")
-        log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="generator_problem_not_found",
-                       details={"contest_id": contest_id, "problem_id": problem_id})
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+    problem = check_submission(contest_id, problem_id)
 
     if not problem.generator_code:
         print(f"Service: Generator code not found for problem {problem.id}")

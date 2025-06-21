@@ -17,7 +17,7 @@ async def create_new_submission(
         db: Session = Depends(deps.get_db),
         current_user: db_models.User = Depends(deps.get_current_active_user)
 ):
-    contest_service.check_contest_access_and_get_problem(
+    contest_service.get_contest_problem(
         contest_id=submission_in.contest_id, problem_id=submission_in.problem_id
     )
 

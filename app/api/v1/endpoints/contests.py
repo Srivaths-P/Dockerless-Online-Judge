@@ -69,8 +69,8 @@ async def read_problem_details(
         problem_id: str,
         current_user: db_models.User = Depends(get_current_user_from_cookie)
 ):
-    problem = contest_service.check_contest_access_and_get_problem(
-        contest_id=contest_id, problem_id=problem_id, allow_ended=True
+    problem = contest_service.get_contest_problem(
+        contest_id=contest_id, problem_id=problem_id
     )
 
     return ProblemPublic(
@@ -87,8 +87,8 @@ async def generate_problem_testcase(
         current_user: db_models.User = Depends(get_current_user_from_cookie)
 ) -> Dict[str, Optional[str]]:
     try:
-        contest_service.check_contest_access_and_get_problem(
-            contest_id=contest_id, problem_id=problem_id, allow_ended=True
+        contest_service.get_contest_problem(
+            contest_id=contest_id, problem_id=problem_id
         )
 
         result = await generator_service.generate_sample_testcase(

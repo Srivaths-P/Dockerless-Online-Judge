@@ -31,7 +31,7 @@ async def handle_submission(
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=status.HTTP_303_SEE_OTHER)
 
     try:
-        contest_service.check_contest_access_and_get_problem(contest_id=contest_id, problem_id=problem_id)
+        contest_service.get_contest_problem(contest_id=contest_id, problem_id=problem_id)
     except HTTPException as e:
         flash(request, f"Submission failed: {e.detail}", "danger")
         return RedirectResponse(url=request.url_for("ui_problem_detail", contest_id=contest_id, problem_id=problem_id),

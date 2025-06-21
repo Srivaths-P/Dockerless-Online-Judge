@@ -40,6 +40,8 @@ def _parse_settings_data(settings_data: Dict) -> Dict:
             except (ValueError, TypeError):
                 print(f"Warning: Invalid float value for {key}: {value}. Using default or None.")
                 parsed_settings[key] = None
+        elif key == 'allow_upsolving' and isinstance(value, bool):
+            parsed_settings[key] = value
         else:
             parsed_settings[key] = value
     return parsed_settings
@@ -185,7 +187,8 @@ def load_server_data():
             description_md=description_md,
             start_time=parsed_settings.get("start_time"),
             duration_minutes=parsed_settings.get("duration_minutes"),
-            problems=problems_in_contest_minimal
+            problems=problems_in_contest_minimal,
+            allow_upsolving=parsed_settings.get("allow_upsolving", True)
         )
 
         setattr(contest_obj, '_full_problems', {p.id: p for p in parsed_problems_in_contest_full})
@@ -262,23 +265,34 @@ def get_contest_category(contest: ContestMinimal) -> str:
     return category
 
 
-def check_contest_access_and_get_problem(
-        contest_id: str, problem_id: str, allow_ended: bool = False
+def get_contest_problem(
+        contest_id: str, problem_id: str
 ) -> Problem:
     contest = get_contest_by_id(contest_id)
     if not contest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contest not found")
-
-    problem = get_problem_by_id(contest_id, problem_id)
-    if not problem:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
 
     contest_category = get_contest_category(contest)
 
     if contest_category == "Upcoming":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contest has not started yet.")
 
-    if contest_category == "Ended" and not allow_ended:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contest has ended.")
+    problem = get_problem_by_id(contest_id, problem_id)
+    if not problem:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
+
+    return problem
+
+
+def check_submission(contest_id: str, problem_id: str) -> Problem:
+    problem = get_contest_problem(contest_id, problem_id)
+    contest = get_contest_by_id(contest_id)
+
+    contest_category = get_contest_category(contest)
+    if contest_category == "Ended" and not contest.allow_upsolving:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed for this contest after it has ended."
+        )
 
     return problem
