@@ -1,4 +1,4 @@
-# Dockerless Online Judge (DOJ)
+# [Dockerless Online Judge](doj.sriv.in) (DOJ)
 
 [![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Framework](https://img.shields.io/badge/Framework-FastAPI-green.svg)](https://fastapi.tiangolo.com/)
@@ -22,9 +22,11 @@ Contests and problems are defined through a simple filesystem structure, making 
 *   **Asynchronous Judging:** Submissions are pushed to a high-performance `asyncio` queue and processed by a pool of background workers, ensuring the web interface remains fast and responsive.
 *   **Advanced Judging Logic:**
     *   **Custom Validators:** Support for problems with multiple correct answers (e.g., floating-point precision, path-finding) via custom validator scripts.
-    *   **Configurable Languages:** The language for validator and generator scripts can be configured.
-*   **Test Case Generator:** Problems can include a `generator` script that users can trigger from the UI to see sample test cases.
+    *   **Test Case Generators:** Problems can include a `generator` script that users can trigger from the UI to see sample test cases.
 *   **Contest Lifecycle Management:** Full support for `Upcoming`, `Active`, and `Ended` contest states, with access controls to hide problems before a contest starts and block submissions after it ends.
+*   **Configuration & UX:**
+    *   Configurable cooldowns for submissions and test case generation on a per-problem basis.
+    *   Persistent in-browser code editor state that saves code per problem as the user types.
 *   **Comprehensive Logging:** Detailed JSON logs track user activity, submission lifecycle events, and generator requests for auditing and analytics.
 
 ## System Architecture
@@ -46,7 +48,7 @@ DOJ is built on a layered architecture to ensure separation of concerns and secu
 
 *   A **Linux-based operating system** (for `systemd` and `bubblewrap`).
 *   **Python 3.11+**.
-*   **`bubblewrap`** (`bwrap`) installed system-wide.
+*   **`bubblewrap`** (`bwrap`) installed system-wide. On Debian/Ubuntu: `sudo apt-get install bubblewrap`.
 *   **`gcc`** and **`g++`** compilers installed for C/C++ support.
 *   **`systemd`** user instance capabilities. For running as a system service, [user lingering](https://wiki.archlinux.org/title/Systemd/User#Automatic_start-up_of_systemd_user_instances) must be enabled for the user running the application.
 
@@ -78,7 +80,7 @@ DOJ is built on a layered architecture to ensure separation of concerns and secu
     You can generate secure keys with the command: `python3 -c 'import secrets; print(secrets.token_hex(32))'`
 
 5.  **Set up the Database:**
-    This project uses Alembic for database migrations. Run the following command to create and initialize the `judge.db` file.
+    This project uses Alembic for database migrations. Run the following command to create and initialize the `judge.db` file. This is a mandatory step.
     ```bash
     alembic upgrade head
     ```
@@ -103,10 +105,8 @@ Set the `ADMIN_RELOAD_TOKEN` variable in your `.env` file.
 2.  **Trigger the Reload:** From your server's command line, use `curl` to send a POST request to the reload endpoint.
     ```bash
     # Replace YOUR_STATIC_TOKEN_HERE with the value from your .env file
-    curl -X POST "http://127.0.0.1:8000/api/v1/contests/reload" \
-         -H "Authorization: Bearer YOUR_STATIC_TOKEN_HERE"
+    curl -X POST "http://127.0.0.1:8000/api/v1/contests/reload" -H "Authorization: Bearer YOUR_STATIC_TOKEN_HERE"
     ```
-3.  **Verify:** The server will respond with the method used for reloading (e.g., `{"message":"...","method":"direct_call"}`).
 
 ## Contest & Problem Format
 
@@ -126,36 +126,42 @@ server_data/
             ├── validator.py           <-- (Optional) Custom validator
             └── tests/                 <-- Folder for all test cases
                 ├── 01-small.in        <-- Test case input
-                ├── 01-small.out       <-- Test case output (Optional if using a custom validator)
+                ├── 01-small.out       <-- Test case output
                 ├── 02-large.in
                 ├── 02-large.out
                 └── ...
 ```
 
-### Problem `settings.json`
+### Contest `settings.json`
+This file configures the overall contest.
+```json
+{
+  "title": "My Sample Contest",
+  "start_time": "2024-08-01T12:00:00Z",
+  "duration_minutes": 120
+}
+```
+* `start_time` and `duration_minutes` are optional. If omitted, the contest is always active. `start_time` must be a full ISO 8601 string with timezone information (or 'Z' for UTC).
 
+### Problem `settings.json`
 This file configures the behavior of a single problem.
 
-**Example `settings.json` with a custom validator:**
 ```json
 {
   "title": "Palindrome Creation",
   "time_limit_sec": 1,
   "memory_limit_mb": 64,
   "allowed_languages": ["python", "c++"],
-
   "submission_cooldown_sec": 10,
   "generator_cooldown_sec": 5,
-
   "validator_language": "python",
   "validator_time_limit_sec": 5,
   "validator_memory_limit_mb": 64
 }
 ```
-*   The judge will automatically detect the `validator.py` file and use it. If no validator is provided, it defaults to a standard `diff` check.
+*   The judge will automatically detect `validator.py` and `generator.py` files. If no validator is provided, it defaults to a standard `diff` check against the `.out` files.
 
 ### Custom Validator
-
 A validator is a script that determines if a user's output is correct. It is essential for problems with multiple valid solutions.
 
 *   **Interface:** The validator script receives three file paths as command-line arguments:
@@ -164,8 +170,8 @@ A validator is a script that determines if a user's output is correct. It is ess
     3.  `sys.argv[3]`: Path to the official/expected output file (`test.out`).
 *   **Verdict:** The verdict is determined by the validator's **exit code**:
     *   **Exit Code 0:** Accepted (AC)
-    *   **Exit Code 1:** Wrong Answer (WA)
-    *   **Any Other Exit Code:** Internal Error (IE) - Indicates a problem with the validator itself.
+    *   **Any non-zero Exit Code:** Wrong Answer (WA)
+    *   If the validator itself fails to execute (e.g., times out, runs out of memory, or has a syntax error), it will result in an Internal Error (IE) for the submission.
 
 **Example `validator.py` snippet:**
 ```python
@@ -174,6 +180,7 @@ import sys
 def main():
     problem_input_path = sys.argv[1]
     user_output_path = sys.argv[2]
+    expected_output_path = sys.argv[3]
     
     # ... read files and perform validation logic ...
     
@@ -183,13 +190,20 @@ def main():
         sys.exit(1)  # Wrong Answer
 ```
 
+### Test Case Generator
+A generator script allows users to create sample test cases from the UI.
+* **Interface:** The generator script should be self-contained and not require any input.
+* **Output:**
+    *   Content written to `stdout` becomes the **sample input**.
+    *   Content written to `stderr` becomes the **sample output**. This unconventional mapping allows the script to produce two distinct streams of data (input and expected output) from a single execution.
+
 ## Roadmap
 
 *   **Core Judge:**
     *   Support for more programming languages.
     *   Support for interactive problems.
 *   **UI/UX:**
-    *   Real-time submission status updates via WebSockets or Server-Sent Events.
+    *   Real-time submission status updates via WebSockets or Server-Sent Events (currently uses periodic polling).
     *   Live contest leaderboards.
     *   Post-contest statistics and ability to view others' solutions.
 *   **Backend & Deployment:**
