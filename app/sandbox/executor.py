@@ -1,390 +1,166 @@
 import asyncio
 import os
 import shutil
-import subprocess
 import tempfile
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, Optional, List
+from typing import Any
 
 from sqlalchemy.orm import Session
 
 from app.crud import crud_submission
 from app.db.session import SessionLocal
+from app.sandbox.common import diff_files
+from app.sandbox.engine import run_sandboxed
 from app.schemas.problem import Problem, TestCase
 from app.schemas.submission import SubmissionStatus, TestCaseResult
 from app.services.contest_service import get_problem_by_id
-
-BWRAP = "/usr/bin/bwrap"
-PYTHON3 = "/usr/bin/python3"
-GCC = "/usr/bin/gcc"
-GPP = os.getenv("GPP_PATH", "/usr/bin/g++")
-
-WRAPPER_SCRIPT = """
-import os
-import resource
-import sys
-import time
-
-command = sys.argv[1:]
-
-stdin_path = '/sandbox/input.txt'
-stdout_path = '/sandbox/results/user.stdout'
-stderr_path = '/sandbox/results/user.stderr'
-res_log_path = '/sandbox/res.log'
-
-if os.path.exists(stdin_path):
-    stdin_fd = os.open(stdin_path, os.O_RDONLY)
-else:
-    stdin_fd = os.open(os.devnull, os.O_RDONLY)
-
-stdout_fd = os.open(stdout_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
-stderr_fd = os.open(stderr_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
-
-pid = os.fork()
-
-if pid == 0:
-    try:
-        os.dup2(stdin_fd, sys.stdin.fileno())
-        os.dup2(stdout_fd, sys.stdout.fileno())
-        os.dup2(stderr_fd, sys.stderr.fileno())
-        os.execv(command[0], command)
-    except Exception as e:
-        os.write(stderr_fd, f"Wrapper execv error: {e}".encode())
-        os._exit(127)
-else:
-    start_time = time.perf_counter()
-    _pid, status, rusage = os.wait4(pid, 0)
-    end_time = time.perf_counter()
-
-    wall_time_s = end_time - start_time
-    mem_kb = rusage.ru_maxrss
-    exit_code = os.waitstatus_to_exitcode(status)
-
-    with open(res_log_path, 'w') as f:
-        f.write(f"EXIT_CODE:{exit_code}\\n")
-        f.write(f"WALL_S:{wall_time_s:.4f}\\n")
-        f.write(f"MEM_KB:{mem_kb}\\n")
-
-    os.close(stdin_fd)
-    os.close(stdout_fd)
-    os.close(stderr_fd)
-"""
-
-LANGUAGE_CONFIG: Dict[str, Dict[str, Any]] = {
-    "python": {
-        "ext": ".py",
-        "compile": None,
-        "run": [PYTHON3, "/sandbox/user_code.py"]
-    },
-    "c": {
-        "ext": ".c",
-        "compile": [GCC, "/sandbox/user_code.c", "-o", "/sandbox/user_exec",
-                    "-O2", "-std=c11", "-lm"],
-        "run": ["/sandbox/user_exec"]
-    },
-    "c++": {
-        "ext": ".cpp",
-        "compile": [GPP, "/sandbox/user_code.cpp", "-o", "/sandbox/user_exec",
-                    "-O2", "-std=c++17"],
-        "run": ["/sandbox/user_exec"]
-    },
-}
 
 MAX_THREADS = (os.cpu_count() or 2) * 2
 blocking_executor = ThreadPoolExecutor(max_workers=MAX_THREADS)
 
 
-def _make_systemd_bwrap_cmd(
-        unit: str,
-        tlim: int,
-        mlim: int,
-        bwrap_args: list
-) -> list:
-    cmd = [
-              "systemd-run", "--quiet", "--scope", "--user",
-              f"--unit={unit}", "--slice=judge.slice",
-              "-p", "TasksMax=64",
-              "-p", f"RuntimeMaxSec={tlim}",
-              "-p", "CPUQuota=100%",
-              "-p", f"MemoryMax={mlim}M",
-              BWRAP
-          ] + bwrap_args
-    return cmd
-
-
-def _systemd_bwrap_run(
-        unit: str,
-        tlim: int,
-        mlim: int,
-        bwrap_args: list,
-) -> Dict[str, Any]:
-    full_cmd = _make_systemd_bwrap_cmd(unit, tlim, mlim, bwrap_args)
-    subprocess.run(full_cmd, check=False)
-
-    systemd_result_str = "unknown"
-    try:
-        scope_unit_name = f"{unit}.scope"
-        show_cmd = ["systemctl", "show", "--user", scope_unit_name, "-p", "Result", "--value"]
-        res = subprocess.run(show_cmd, capture_output=True, text=True, check=False)
-        if res.returncode == 0:
-            systemd_result_str = res.stdout.strip()
-    except Exception as e:
-        print(f"Failed to get systemd result for {unit}: {e}")
-
-    subprocess.run(["systemctl", "--user", "reset-failed", f"{unit}.scope"],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-    subprocess.run(["systemctl", "--user", "stop", f"{unit}.scope"],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-
-    return {"systemd_result": systemd_result_str}
-
-
-def _diff_files(out_path: str, exp_path: str) -> int:
-    if not os.path.exists(out_path): open(out_path, 'w').close()
-    if not os.path.exists(exp_path): open(exp_path, 'w').close()
-    return subprocess.run(["diff", "-Z", "--strip-trailing-cr", "-q", out_path, exp_path],
-                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
-
-
-async def run_code_in_sandbox(
+async def _judge_test_case(
         submission_id: uuid.UUID,
         code: str,
+        language: str,
         problem: Problem,
-        test_case: TestCase,
-        language: str
+        test_case: TestCase
 ) -> TestCaseResult:
-    lang = language.lower()
-    cfg = LANGUAGE_CONFIG.get(lang)
-    if not cfg:
+    user_run_result = await run_sandboxed(
+        code=code,
+        language=language,
+        run_input=test_case.input_content,
+        time_limit_sec=problem.time_limit_sec,
+        memory_limit_mb=problem.memory_limit_mb,
+        unit_name_prefix=f"sub-{submission_id.hex[:8]}"
+    )
+
+    if user_run_result.status == 'compilation_error':
+        return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.COMPILATION_ERROR,
+                              stderr=user_run_result.compilation_stderr)
+    if user_run_result.status == 'timeout':
+        return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.TIME_LIMIT_EXCEEDED,
+                              execution_time_ms=user_run_result.execution_time_ms,
+                              memory_used_kb=user_run_result.memory_used_kb)
+    if user_run_result.status == 'oom-kill':
+        return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.MEMORY_LIMIT_EXCEEDED,
+                              execution_time_ms=user_run_result.execution_time_ms,
+                              memory_used_kb=user_run_result.memory_used_kb)
+
+    if user_run_result.exit_code != 0:
+        return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.RUNTIME_ERROR,
+                              stderr=user_run_result.stderr, execution_time_ms=user_run_result.execution_time_ms,
+                              memory_used_kb=user_run_result.memory_used_kb)
+
+    if user_run_result.status != 'success':
         return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.INTERNAL_ERROR,
-                              stderr=f"Unsupported language: {language}")
+                              stderr=user_run_result.stderr or "Unknown internal error in sandbox engine.")
 
-    td = tempfile.mkdtemp(prefix=f"judge_{submission_id.hex[:8]}_")
-
+    td = None
     try:
-        results_dir = os.path.join(td, "results")
-        os.makedirs(results_dir, exist_ok=True)
+        full_stdout = user_run_result.stdout or ""
+        display_stdout = (full_stdout[:4096] + '...') if len(full_stdout) > 4096 else full_stdout
 
-        out_f = os.path.join(results_dir, "user.stdout")
-        err_f = os.path.join(results_dir, "user.stderr")
-        res_log_f = os.path.join(td, "res.log")
-        in_f = os.path.join(td, "input.txt")
-        exp_f = os.path.join(td, "expected.txt")
-        wrapper_f = os.path.join(td, "wrapper.py")
+        if problem.validator_type == 'custom' and problem.validator_code:
+            td = tempfile.mkdtemp(prefix=f"validator_{submission_id.hex[:8]}_")
+            user_out_path = os.path.join(td, "user.out")
+            test_in_path = os.path.join(td, "test.in")
+            test_exp_path = os.path.join(td, "test.exp")
 
-        with open(os.path.join(td, "user_code" + cfg["ext"]), 'w') as f:
-            f.write(code)
-        with open(wrapper_f, 'w') as f:
-            f.write(WRAPPER_SCRIPT)
-        if test_case.input_content is not None:
-            with open(in_f, 'w') as f: f.write(test_case.input_content)
-        with open(exp_f, 'w') as f:
-            f.write(test_case.output_content or "")
+            with open(user_out_path, 'w') as f:
+                f.write(full_stdout)
+            with open(test_in_path, 'w') as f:
+                f.write(test_case.input_content or "")
+            with open(test_exp_path, 'w') as f:
+                f.write(test_case.output_content or "")
 
-        if cfg["compile"]:
-            unit_c = f"compile-{submission_id.hex[:8]}-{uuid.uuid4().hex[:4]}"
-
-            compile_wrapper_script = WRAPPER_SCRIPT.replace("'/sandbox/input.txt'", "'/dev/null'")
-
-            with open(wrapper_f, 'w') as f:
-                f.write(compile_wrapper_script)
-
-            bwrap_args_c = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
-                            "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
-                            "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                            "--unshare-pid", "--unshare-net",
-                            PYTHON3, "/sandbox/wrapper.py"] + cfg["compile"]
-
-            cres = await asyncio.get_running_loop().run_in_executor(
-                blocking_executor, _systemd_bwrap_run, unit_c, 30, 512, bwrap_args_c
+            validator_result = await run_sandboxed(
+                code=problem.validator_code,
+                language=problem.validator_language,
+                run_input=None,
+                time_limit_sec=problem.validator_time_limit_sec,
+                memory_limit_mb=problem.validator_memory_limit_mb,
+                unit_name_prefix=f"val-{submission_id.hex[:8]}",
+                extra_bind_files=[
+                    (test_in_path, "/sandbox/input.txt"),
+                    (user_out_path, "/sandbox/user.out"),
+                    (test_exp_path, "/sandbox/expected.out")
+                ],
+                cmd_args=[
+                    "/sandbox/input.txt",
+                    "/sandbox/user.out",
+                    "/sandbox/expected.out"
+                ]
             )
 
-            compile_exit_code = -1
-            try:
-                with open(res_log_f, 'r') as f:
-                    for line in f:
-                        if line.startswith("EXIT_CODE:"):
-                            compile_exit_code = int(line.strip().split(':')[1])
-            except (IOError, IndexError, ValueError):
-                pass
+            if validator_result.status != 'success' or validator_result.exit_code is None:
+                return TestCaseResult(
+                    test_case_name=test_case.name, status=SubmissionStatus.INTERNAL_ERROR,
+                    stderr=f"Judge Validator Error: The validator failed to execute (Status: {validator_result.status}). Please contact an admin.",
+                    execution_time_ms=user_run_result.execution_time_ms, memory_used_kb=user_run_result.memory_used_kb
+                )
 
-            if cres.get("systemd_result") != "success" or compile_exit_code != 0:
-                compile_stderr = ""
-                if os.path.exists(err_f):
-                    with open(err_f, 'r', errors='ignore') as f:
-                        compile_stderr = f.read(4096).strip()
-                if cres.get("systemd_result") == "timeout":
-                    compile_stderr = "Compilation Timed Out.\n" + compile_stderr
-                elif cres.get("systemd_result") == "oom-kill":
-                    compile_stderr = "Compilation Memory Limit Exceeded.\n" + compile_stderr
+            print(
+                f"Validator result: {validator_result.exit_code}, stdout: {validator_result.stdout}, stderr: {validator_result.stderr}")
+            status = SubmissionStatus.ACCEPTED if validator_result.exit_code == 0 else SubmissionStatus.WRONG_ANSWER
 
-                return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.COMPILATION_ERROR,
-                                      stderr=compile_stderr or "Compilation failed.")
-
-            with open(wrapper_f, 'w') as f:
-                f.write(WRAPPER_SCRIPT)
-
-            executable_path = os.path.join(td, "user_exec")
-            if os.path.exists(executable_path):
-                os.chmod(executable_path, 0o755)
-            else:
-                return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.INTERNAL_ERROR,
-                                      stderr="Compiler succeeded but produced no executable file.")
-
-        unit_e = f"exec-{submission_id.hex[:8]}-{uuid.uuid4().hex[:4]}"
-        command_to_wrap = cfg["run"]
-        bwrap_args_e = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
-                        "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
-                        "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                        "--unshare-pid", "--unshare-net",
-                        PYTHON3, "/sandbox/wrapper.py"] + command_to_wrap
-
-        eres = await asyncio.get_running_loop().run_in_executor(
-            blocking_executor, _systemd_bwrap_run, unit_e,
-            problem.time_limit_sec, problem.memory_limit_mb, bwrap_args_e
-        )
-
-        exec_ms, mem_kb, exit_code = 0.0, 0, 0
-        try:
-            with open(res_log_f, 'r') as f:
-                for line in f:
-                    if line.startswith("EXIT_CODE:"): exit_code = int(line.strip().split(':')[1])
-                    if line.startswith("WALL_S:"): exec_ms = round(float(line.strip().split(':')[1]) * 1000, 2)
-                    if line.startswith("MEM_KB:"): mem_kb = int(line.strip().split(':')[1])
-        except (IOError, IndexError, ValueError):
-            pass
-
-        sysd = eres.get("systemd_result")
-        status: SubmissionStatus
-        if sysd == "timeout":
-            status = SubmissionStatus.TIME_LIMIT_EXCEEDED
-            exec_ms = float(problem.time_limit_sec * 1000)
-        elif sysd == "oom-kill":
-            status = SubmissionStatus.MEMORY_LIMIT_EXCEEDED
-        elif exit_code != 0:
-            status = SubmissionStatus.RUNTIME_ERROR
         else:
-            diffc = await asyncio.get_running_loop().run_in_executor(blocking_executor, _diff_files, out_f, exp_f)
-            status = SubmissionStatus.ACCEPTED if diffc == 0 else SubmissionStatus.WRONG_ANSWER
+            td = tempfile.mkdtemp(prefix=f"diff_{submission_id.hex[:8]}_")
+            user_out_path = os.path.join(td, "user.out")
+            test_exp_path = os.path.join(td, "test.exp")
+            with open(user_out_path, 'w') as f:
+                f.write(full_stdout)
+            with open(test_exp_path, 'w') as f:
+                f.write(test_case.output_content or "")
 
-        stderr_msg, stdout_content = None, None
-        if os.path.exists(err_f):
-            with open(err_f, 'r', errors='ignore') as f: stderr_msg = f.read(4096).strip() or None
-        if status == SubmissionStatus.WRONG_ANSWER and os.path.exists(out_f):
-            with open(out_f, 'r', errors='ignore') as f: stdout_content = f.read(4096).strip() or None
+            diff_code = await asyncio.get_running_loop().run_in_executor(blocking_executor, diff_files, user_out_path,
+                                                                         test_exp_path)
+            status = SubmissionStatus.ACCEPTED if diff_code == 0 else SubmissionStatus.WRONG_ANSWER
 
         return TestCaseResult(
-            test_case_name=test_case.name, status=status, stdout=stdout_content, stderr=stderr_msg,
-            execution_time_ms=exec_ms, memory_used_kb=mem_kb
+            test_case_name=test_case.name, status=status,
+            stdout=display_stdout if status == SubmissionStatus.WRONG_ANSWER else None,
+            stderr=user_run_result.stderr,
+            execution_time_ms=user_run_result.execution_time_ms, memory_used_kb=user_run_result.memory_used_kb
         )
-    except Exception as e:
-        traceback.print_exc()
-        return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.INTERNAL_ERROR,
-                              stderr=f"Sandbox critical error: {e}", execution_time_ms=0.0, memory_used_kb=0)
+
     finally:
-        shutil.rmtree(td, ignore_errors=True)
+        if td: shutil.rmtree(td, ignore_errors=True)
 
 
-async def run_generator_in_sandbox(
-        problem: Problem,
-        language: str = "python"
-) -> Dict[str, Any]:
-    lang = language.lower()
-    cfg = LANGUAGE_CONFIG.get(lang)
-    if not cfg:
-        return {"input": None, "output": None,
-                "error": f"Unsupported generator language: {language}",
-                "status": "error"}
+from typing import Optional, List, Dict
 
+
+async def run_generator_in_sandbox(problem: Problem) -> Dict[str, Any]:
     if not problem.generator_code:
-        return {"input": None, "output": None,
-                "error": "Generator code not found in problem object.",
+        return {"input": None, "output": None, "error": "Generator code not found in problem object.",
                 "status": "error"}
+    result = await run_sandboxed(
+        code=problem.generator_code,
+        language=problem.generator_language,
+        run_input=None,
+        time_limit_sec=int(problem.generator_time_limit_sec or 5.0),
+        memory_limit_mb=problem.generator_memory_limit_mb or 256,
+        unit_name_prefix="gen"
+    )
+    error_content: Optional[str] = None
+    if result.status == 'compilation_error':
+        error_content = "Generator " + (result.compilation_stderr or "compilation failed.")
+    elif result.exit_code != 0:
+        error_content = f"Generator script exited with error code {result.exit_code}. Status: {result.status}. Detail: {result.stderr or 'No error output.'}"
+    elif result.status != 'success':
+        error_content = f"Generator sandbox failed to execute. Status: {result.status}."
 
-    generator_code = problem.generator_code
-    td = tempfile.mkdtemp(prefix=f"generator_{uuid.uuid4().hex[:8]}_")
-
-    try:
-        results_dir = os.path.join(td, "results")
-        os.makedirs(results_dir, exist_ok=True)
-        out_f = os.path.join(results_dir, "user.stdout")
-        err_f = os.path.join(results_dir, "user.stderr")
-        res_log_f = os.path.join(td, "res.log")
-        wrapper_f = os.path.join(td, "wrapper.py")
-
-        with open(os.path.join(td, "user_code" + cfg["ext"]), 'w') as f:
-            f.write(generator_code)
-
-        gen_wrapper_script = WRAPPER_SCRIPT.replace("'/sandbox/input.txt'", "'/dev/null'")
-        with open(wrapper_f, 'w') as f:
-            f.write(gen_wrapper_script)
-
-        unit_g = f"gen-{uuid.uuid4().hex[:8]}"
-        command_to_wrap = cfg["run"]
-        bwrap_args_g = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
-                        "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
-                        "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                        "--unshare-pid", "--unshare-net",
-                        PYTHON3, "/sandbox/wrapper.py"] + command_to_wrap
-
-        g_tlim_sec = problem.generator_time_limit_sec or 5.0
-        g_mlim_mb = problem.generator_memory_limit_mb or 256
-        g_tlim_sec = max(1.0, g_tlim_sec)
-
-        gres = await asyncio.get_running_loop().run_in_executor(
-            blocking_executor, _systemd_bwrap_run, unit_g,
-            int(g_tlim_sec), g_mlim_mb, bwrap_args_g
-        )
-
-        exec_ms, mem_kb, exit_code = 0.0, 0, 0
-        try:
-            with open(res_log_f, 'r') as f:
-                for line in f:
-                    if line.startswith("EXIT_CODE:"): exit_code = int(line.strip().split(':')[1])
-                    if line.startswith("WALL_S:"): exec_ms = round(float(line.strip().split(':')[1]) * 1000, 2)
-                    if line.startswith("MEM_KB:"): mem_kb = int(line.strip().split(':')[1])
-        except (IOError, IndexError, ValueError):
-            pass
-
-        sysd = gres.get("systemd_result")
-        error_content: Optional[str] = None
-        status_reason = f"Systemd: {sysd}, Exit: {exit_code}, Time: {exec_ms}ms, Mem: {mem_kb}KB"
-
-        if sysd == "timeout":
-            error_content = f"Generator Timed Out ({g_tlim_sec}s). {status_reason}"
-        elif sysd == "oom-kill":
-            error_content = f"Generator Memory Limit Exceeded ({g_mlim_mb}MB). {status_reason}"
-        elif exit_code != 0:
-            error_content = f"Generator script exited with error code {exit_code}. {status_reason}"
-
-        input_content, output_content = None, None
-        if not error_content:
-            if os.path.exists(out_f):
-                with open(out_f, 'r', errors='ignore') as f: input_content = f.read(8192).strip() or None
-            if os.path.exists(err_f):
-                with open(err_f, 'r', errors='ignore') as f: output_content = f.read(8192).strip() or None
-        elif os.path.exists(err_f):
-            with open(err_f, 'r', errors='ignore') as f:
-                script_error = f.read(4096).strip()
-                if script_error:
-                    error_content += f"\n---\nGenerator Script Error Output:\n{script_error}"
-
-        return {
-            "input": input_content, "output": output_content, "error": error_content,
-            "execution_time_ms": exec_ms, "memory_used_kb": mem_kb,
-            "status": "success" if error_content is None else "error"
-        }
-    except Exception as e:
-        traceback.print_exc()
-        return {
-            "input": None, "output": None,
-            "error": f"Generator sandbox critical error: {e}",
-            "execution_time_ms": 0.0, "memory_used_kb": 0, "status": "internal_error"
-        }
-    finally:
-        shutil.rmtree(td, ignore_errors=True)
+    return {
+        "input": result.stdout,
+        "output": result.stderr,
+        "error": error_content,
+        "execution_time_ms": result.execution_time_ms,
+        "memory_used_kb": result.memory_used_kb,
+        "status": "success" if error_content is None else "error"
+    }
 
 
 class SubmissionProcessingQueue:
@@ -394,22 +170,16 @@ class SubmissionProcessingQueue:
         self._workers: List[asyncio.Task] = []
 
     async def start_workers(self):
-        if self._workers:
-            return
+        if self._workers: return
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             return
-        self._workers = [
-            loop.create_task(self._worker(worker_id=i))
-            for i in range(self._worker_count)
-        ]
+        self._workers = [loop.create_task(self._worker(worker_id=i)) for i in range(self._worker_count)]
 
     async def stop_workers(self):
-        if not self._workers:
-            return
-        for _ in self._workers:
-            await self._queue.put(None)
+        if not self._workers: return
+        for _ in self._workers: await self._queue.put(None)
         await asyncio.gather(*self._workers, return_exceptions=True)
         self._workers = []
         while not self._queue.empty():
@@ -440,13 +210,11 @@ class SubmissionProcessingQueue:
         try:
             db = SessionLocal()
             sub = crud_submission.submission.get(db, id_=submission_id)
-            if not sub:
-                return
+            if not sub: return
 
             terminal_statuses = {s.value for s in SubmissionStatus if
                                  s not in [SubmissionStatus.PENDING, SubmissionStatus.RUNNING]}
-            if sub.status in terminal_statuses:
-                return
+            if sub.status in terminal_statuses: return
 
             sub.status = SubmissionStatus.RUNNING.value
             db.add(sub)
@@ -465,41 +233,29 @@ class SubmissionProcessingQueue:
             final_results: List[TestCaseResult] = []
             overall_status = SubmissionStatus.ACCEPTED
 
-            # Sort test cases for deterministic execution order
             sorted_test_cases = sorted(problem.test_cases, key=lambda tc: tc.name)
 
             for tc in sorted_test_cases:
                 try:
-                    res = await run_code_in_sandbox(
-                        submission_id=uuid.UUID(submission_id),
-                        code=sub.code,
-                        problem=problem,
-                        test_case=tc,
-                        language=sub.language
-                    )
+                    res = await _judge_test_case(submission_id=uuid.UUID(submission_id), code=sub.code,
+                                                 language=sub.language, problem=problem, test_case=tc)
                 except Exception as e:
                     traceback.print_exc()
                     res = TestCaseResult(test_case_name=tc.name, status=SubmissionStatus.INTERNAL_ERROR,
                                          stderr=f"Executor error: {type(e).__name__}: {e}")
+
                 final_results.append(res)
                 if res.status != SubmissionStatus.ACCEPTED:
-                    if overall_status == SubmissionStatus.ACCEPTED:
-                        overall_status = res.status
+                    overall_status = res.status
                     break
 
-            crud_submission.submission.update_submission_results(
-                db,
-                db_obj=sub,
-                status=overall_status.value,
-                results=final_results
-            )
+            crud_submission.submission.update_submission_results(db, db_obj=sub, status=overall_status.value,
+                                                                 results=final_results)
         except Exception as e:
-            if db:
-                db.rollback()
+            if db: db.rollback()
             raise
         finally:
-            if db:
-                db.close()
+            if db: db.close()
 
     async def _handle_error(self, submission_id: str, error_message: str):
         db: Optional[Session] = None
@@ -515,8 +271,7 @@ class SubmissionProcessingQueue:
         except Exception as db_err:
             if db: db.rollback()
         finally:
-            if db:
-                db.close()
+            if db: db.close()
 
 
 QUEUE_WORKER_COUNT = (os.cpu_count() or 1)

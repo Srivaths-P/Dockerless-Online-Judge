@@ -4,7 +4,7 @@ import sys
 
 is_pal = randint(0, 1)
 
-n = randint(1, 10 ** 2)
+n = randint(1, 20)
 if not is_pal:
     cnts = [0] * 26
     for _ in range(n):

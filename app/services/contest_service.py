@@ -4,6 +4,8 @@ from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
 
 from fastapi import HTTPException, status
+
+from app.sandbox.common import LANGUAGE_CONFIG
 from app.schemas.contest import Contest, ContestMinimal
 from app.schemas.problem import Problem, ProblemMinimal, TestCase
 
@@ -25,7 +27,8 @@ def _parse_settings_data(settings_data: Dict) -> Dict:
                 print(f"Warning: Could not parse start_time '{value}' as ISO 8601 datetime.")
                 parsed_settings[key] = None
         elif key in ['time_limit_sec', 'memory_limit_mb', 'generator_memory_limit_mb', 'submission_cooldown_sec',
-                     'generator_cooldown_sec'] and value is not None:
+                     'generator_cooldown_sec', 'validator_memory_limit_mb',
+                     'validator_time_limit_sec'] and value is not None:
             try:
                 parsed_settings[key] = int(value)
             except (ValueError, TypeError):
@@ -45,52 +48,65 @@ def _parse_settings_data(settings_data: Dict) -> Dict:
 def _load_problem(contest_id: str, problem_id: str, problem_path: str) -> Optional[Problem]:
     index_md_path = os.path.join(problem_path, "index.md")
     settings_json_path = os.path.join(problem_path, "settings.json")
-    generator_py_path = os.path.join(problem_path, "generator.py")
 
     if not (os.path.exists(index_md_path) and os.path.exists(settings_json_path)):
-        print(f"Warning: Missing index.md or settings.json for problem {problem_id} in contest {contest_id}")
         return None
-
-    description_md = ""
-    settings_data_raw = {}
-    generator_code = None
 
     try:
         with open(index_md_path, "r", encoding='utf-8') as f:
             description_md = f.read()
         with open(settings_json_path, "r", encoding='utf-8') as f:
             settings_data_raw = json.load(f)
-        if os.path.exists(generator_py_path):
-            with open(generator_py_path, "r", encoding='utf-8') as f:
-                generator_code = f.read()
-    except FileNotFoundError:
-        print(f"Error: File not found during loading of problem {problem_id} in contest {contest_id}.")
-        return None
-    except json.JSONDecodeError:
-        print(f"Error: Invalid JSON in settings for problem {problem_id} in contest {contest_id}.")
-        return None
     except Exception as e:
         print(f"An unexpected error occurred loading problem {problem_id} base files: {e}")
         return None
 
     settings_data = _parse_settings_data(settings_data_raw)
 
+    generator_lang = settings_data.get("generator_language", "python").lower()
+    validator_lang = settings_data.get("validator_language", "python").lower()
+
+    generator_ext = LANGUAGE_CONFIG.get(generator_lang, {}).get("ext")
+    validator_ext = LANGUAGE_CONFIG.get(validator_lang, {}).get("ext")
+
+    generator_code = None
+    if generator_ext:
+        generator_path = os.path.join(problem_path, f"generator{generator_ext}")
+        if os.path.exists(generator_path):
+            with open(generator_path, "r", encoding='utf-8') as f:
+                gen_code_content = f.read().strip()
+                if gen_code_content:
+                    generator_code = gen_code_content
+
+    validator_code = None
+    if validator_ext:
+        validator_path = os.path.join(problem_path, f"validator{validator_ext}")
+        if os.path.exists(validator_path):
+            with open(validator_path, "r", encoding='utf-8') as f:
+                val_code_content = f.read().strip()
+                if val_code_content:
+                    validator_code = val_code_content
+
     test_cases_data: List[TestCase] = []
-    for item in os.listdir(problem_path):
+    tests_dir_path = os.path.join(problem_path, "tests")
+
+    search_path = tests_dir_path if os.path.isdir(tests_dir_path) else problem_path
+
+    for item in os.listdir(search_path):
         if item.endswith(".in"):
             name = item[:-3]
-            in_path = os.path.join(problem_path, item)
-            out_path = os.path.join(problem_path, f"{name}.out")
+            in_path = os.path.join(search_path, item)
+            out_path = os.path.join(search_path, f"{name}.out")
 
-            tc_input = None
-            tc_output = None
+            tc_input, tc_output = None, None
             try:
-                if os.path.exists(in_path):
-                    with open(in_path, "r", encoding='utf-8') as f_in:
-                        tc_input = f_in.read()
+                with open(in_path, "r", encoding='utf-8') as f_in:
+                    tc_input = f_in.read()
+
                 if os.path.exists(out_path):
                     with open(out_path, "r", encoding='utf-8') as f_out:
                         tc_output = f_out.read()
+
                 test_cases_data.append(TestCase(name=name, input_content=tc_input, output_content=tc_output))
             except Exception as e:
                 print(f"Error loading test case {name} for problem {problem_id}: {e}")
@@ -102,10 +118,16 @@ def _load_problem(contest_id: str, problem_id: str, problem_path: str) -> Option
         time_limit_sec=settings_data.get("time_limit_sec", 2),
         memory_limit_mb=settings_data.get("memory_limit_mb", 64),
         allowed_languages=settings_data.get("allowed_languages", ["python", "c++"]),
+        validator_type="custom" if validator_code else "diff",
+        validator_code=validator_code,
+        validator_language=validator_lang,
+        validator_time_limit_sec=settings_data.get("validator_time_limit_sec", 10),
+        validator_memory_limit_mb=settings_data.get("validator_memory_limit_mb", 256),
         generator_code=generator_code,
-        test_cases=test_cases_data,
+        generator_language=generator_lang,
         generator_time_limit_sec=settings_data.get("generator_time_limit_sec"),
         generator_memory_limit_mb=settings_data.get("generator_memory_limit_mb"),
+        test_cases=test_cases_data,
         submission_cooldown_sec=settings_data.get("submission_cooldown_sec"),
         generator_cooldown_sec=settings_data.get("generator_cooldown_sec")
     )
@@ -118,7 +140,6 @@ def load_server_data():
         print(f"Warning: Contests directory not found at {CONTESTS_PATH}")
         return
 
-    print(os.listdir(CONTESTS_PATH))
     for contest_id in os.listdir(CONTESTS_PATH):
         contest_path = os.path.join(CONTESTS_PATH, contest_id)
         if not os.path.isdir(contest_path):
@@ -152,7 +173,7 @@ def load_server_data():
 
         for item_name in os.listdir(contest_path):
             item_path = os.path.join(contest_path, item_name)
-            if os.path.isdir(item_path) and item_name not in ('__pycache__',):
+            if os.path.isdir(item_path) and not item_name.startswith('__'):
                 problem = _load_problem(contest_id, item_name, item_path)
                 if problem:
                     problems_in_contest_minimal.append(ProblemMinimal(id=problem.id, title=problem.title))

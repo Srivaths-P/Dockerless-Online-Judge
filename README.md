@@ -19,25 +19,26 @@ Contests and problems are defined through a simple filesystem structure, making 
 *   **Secure Sandboxed Execution:** A multi-layered security model to safely run untrusted code:
     *   **Resource Enforcement (`systemd`):** Hard limits on wall-clock time (TLE), memory usage (MLE), and process count (preventing fork bombs) are enforced at the kernel level using cgroups managed by `systemd`.
     *   **Filesystem & Network Isolation (`bubblewrap`):** User code is executed in a tightly sealed container with no network access (`--unshare-net`) and a read-only view of essential system libraries.
-*   **Accurate Resource Measurement:** A dependency-free Python wrapper script uses the `os.fork()` and `os.wait4()` syscalls to precisely measure the wall-clock time and peak memory usage of user submissions.
 *   **Asynchronous Judging:** Submissions are pushed to a high-performance `asyncio` queue and processed by a pool of background workers, ensuring the web interface remains fast and responsive.
+*   **Advanced Judging Logic:**
+    *   **Custom Validators:** Support for problems with multiple correct answers (e.g., floating-point precision, path-finding) via custom validator scripts.
+    *   **Configurable Languages:** The language for validator and generator scripts can be configured.
+*   **Test Case Generator:** Problems can include a `generator` script that users can trigger from the UI to see sample test cases.
 *   **Contest Lifecycle Management:** Full support for `Upcoming`, `Active`, and `Ended` contest states, with access controls to hide problems before a contest starts and block submissions after it ends.
-*   **Test Case Generator:** Problems can include a `generator.py` script that users can trigger from the UI to see sample test cases.
 *   **Comprehensive Logging:** Detailed JSON logs track user activity, submission lifecycle events, and generator requests for auditing and analytics.
-*   **RESTful API:** A well-defined API for core functionalities like submitting code, checking submission status, and retrieving problem details.
 
 ## System Architecture
 
 DOJ is built on a layered architecture to ensure separation of concerns and security.
 
 1.  **Web & API Layer (FastAPI):** Handles all HTTP requests, serves the Jinja2 frontend, provides the RESTful JSON API, and manages user authentication.
-2.  **Application Logic Layer:** Contains service functions. On a new submission, it validates the request, creates a database record, and enqueues the submission ID.
-3.  **Asynchronous Judging Layer (`asyncio`):** A pool of worker tasks continuously pulls submission IDs from the queue and orchestrates the judging process.
-4.  **Sandboxing & Measurement Layer:**
+2.  **Application Logic Layer:** Contains service functions. On a new submission, it validates the request, creates a database record, and enqueues the submission ID for the judging layer.
+3.  **Asynchronous Judging Layer (`asyncio`):** A pool of worker tasks continuously pulls submission IDs from a queue. It orchestrates the judging workflow by making calls to the sandbox engine.
+4.  **Sandbox Engine Layer:** Provides a high-level API to run arbitrary code. It handles the "compile-if-needed" logic and abstracts away the low-level details of sandboxing.
+5.  **Sandboxing & Measurement Layer:**
     *   **Enforcer (`systemd`):** A transient `systemd` scope applies non-negotiable cgroup limits for Time, Memory, and Processes.
     *   **Isolator (`bubblewrap`):** Inside the `systemd` scope, `bubblewrap` creates the final sandboxed environment with a minimal, read-only filesystem and no network.
     *   **Measurer (`wrapper.py`):** A dynamically-generated Python script uses `os.fork()` and `os.wait4()` to execute the user's code and precisely measure its wall-clock time and peak memory usage.
-    *   **Collector:** The main application reads the measurement results and the `systemd` exit status to determine the final verdict.
 
 ## Getting Started
 
@@ -90,86 +91,102 @@ DOJ is built on a layered architecture to ensure separation of concerns and secu
 
 ## Hot-Reloading Contest Data
 
-To add or update contests and problems on a live server without requiring a full application restart, you can use the secure admin reload endpoint.
+To add or update contests and problems on a live server without requiring a full application restart, you can use the secure admin reload endpoint. This endpoint detects if it's running under Gunicorn (for production) or a development server like Uvicorn and uses the appropriate reload strategy.
 
 ### Prerequisite: Set the Reload Token
 
-This feature requires you to set the `ADMIN_RELOAD_TOKEN` variable in your `.env` file.
-
-1.  Generate a strong, random token:
-    ```bash
-    python3 -c 'import secrets; print(secrets.token_hex(32))'
-    ```
-2.  Add it to your `.env` file:
-    ```env
-    ADMIN_RELOAD_TOKEN=your_generated_secret_token_here
-    ```
+Set the `ADMIN_RELOAD_TOKEN` variable in your `.env` file.
 
 ### Workflow
 
-1.  **Update Server Data:** First, update the files on your server inside the `server_data/contests/` directory. You can do this using `git pull`, `scp`, `rsync`, or by manually editing the files.
-
-2.  **Trigger the Reload:** Next, from your server's command line, use `curl` to send a POST request to the reload endpoint, providing your static token as a Bearer token.
+1.  **Update Server Data:** First, update the files on your server inside the `server_data/contests/` directory.
+2.  **Trigger the Reload:** From your server's command line, use `curl` to send a POST request to the reload endpoint.
     ```bash
     # Replace YOUR_STATIC_TOKEN_HERE with the value from your .env file
-    curl -X POST "https://doj.sriv.in/api/v1/contests/reload" \
+    curl -X POST "http://127.0.0.1:8000/api/v1/contests/reload" \
          -H "Authorization: Bearer YOUR_STATIC_TOKEN_HERE"
     ```
-
-3.  **Verify:** If successful, the server will respond with `{"message":"Graceful worker reload initiated successfully."}`. The new contest data is now live.
+3.  **Verify:** The server will respond with the method used for reloading (e.g., `{"message":"...","method":"direct_call"}`).
 
 ## Contest & Problem Format
 
-To add content, create directories and files inside the `server_data/contests/` directory.
+To add content, create directories and files inside the `server_data/contests/` directory. Read the sample server_data folder and files for clarity.
 
-The expected structure is as follows:
-
+**Directory Structure:**
 ```
 server_data/
 └── contests/
     └── sample-contest/                <-- Contest ID (directory name)
         ├── index.md                   <-- Contest description (Markdown)
         ├── settings.json              <-- Contest settings
-        └── a-plus-b/                  <-- Problem ID (directory name)
+        └── palindrome-problem/        <-- Problem ID (directory name)
             ├── index.md               <-- Problem description (Markdown)
             ├── settings.json          <-- Problem settings
             ├── generator.py           <-- (Optional) Test case generator
-            ├── test1.in               <-- Test case input
-            ├── test1.out              <-- Test case output
-            └── ...                    <-- More test cases
-```
-See the example contests in the `server_data` directory for more clarity.
-
-### `settings.json` examples
-
-**Contest `settings.json`:**
-```json
-{
-  "title": "My First Contest",
-  "start_time": "2024-01-01T00:00:00Z",
-  "duration_minutes": 120
-}
+            ├── validator.py           <-- (Optional) Custom validator
+            └── tests/                 <-- Folder for all test cases
+                ├── 01-small.in        <-- Test case input
+                ├── 01-small.out       <-- Test case output (Optional if using a custom validator)
+                ├── 02-large.in
+                ├── 02-large.out
+                └── ...
 ```
 
-**Problem `settings.json`:**
+### Problem `settings.json`
+
+This file configures the behavior of a single problem.
+
+**Example `settings.json` with a custom validator:**
 ```json
 {
-  "title": "A + B",
+  "title": "Palindrome Creation",
   "time_limit_sec": 1,
   "memory_limit_mb": 64,
   "allowed_languages": ["python", "c++"],
+
   "submission_cooldown_sec": 10,
   "generator_cooldown_sec": 5,
-  "generator_time_limit_sec": 2,
-  "generator_memory_limit_mb": 128
+
+  "validator_language": "python",
+  "validator_time_limit_sec": 5,
+  "validator_memory_limit_mb": 64
 }
+```
+*   The judge will automatically detect the `validator.py` file and use it. If no validator is provided, it defaults to a standard `diff` check.
+
+### Custom Validator
+
+A validator is a script that determines if a user's output is correct. It is essential for problems with multiple valid solutions.
+
+*   **Interface:** The validator script receives three file paths as command-line arguments:
+    1.  `sys.argv[1]`: Path to the problem's input file (e.g., `test.in`).
+    2.  `sys.argv[2]`: Path to the user's output file (`user.out`).
+    3.  `sys.argv[3]`: Path to the official/expected output file (`test.out`).
+*   **Verdict:** The verdict is determined by the validator's **exit code**:
+    *   **Exit Code 0:** Accepted (AC)
+    *   **Exit Code 1:** Wrong Answer (WA)
+    *   **Any Other Exit Code:** Internal Error (IE) - Indicates a problem with the validator itself.
+
+**Example `validator.py` snippet:**
+```python
+import sys
+
+def main():
+    problem_input_path = sys.argv[1]
+    user_output_path = sys.argv[2]
+    
+    # ... read files and perform validation logic ...
+    
+    if is_correct:
+        sys.exit(0)  # Accepted
+    else:
+        sys.exit(1)  # Wrong Answer
 ```
 
 ## Roadmap
 
 *   **Core Judge:**
     *   Support for more programming languages.
-    *   Custom checkers for problems with multiple correct outputs.
     *   Support for interactive problems.
 *   **UI/UX:**
     *   Real-time submission status updates via WebSockets or Server-Sent Events.

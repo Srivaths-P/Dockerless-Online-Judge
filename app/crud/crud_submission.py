@@ -65,7 +65,7 @@ class CRUDSubmission(CRUDBase[Submission, SubmissionCreate, SubmissionUpdate]):
         )
 
     def get_user_submissions_for_contest(
-        self, db: Session, *, submitter_id: int, contest_id: str
+            self, db: Session, *, submitter_id: int, contest_id: str
     ) -> List[Submission]:
         return (
             db.query(self.model)

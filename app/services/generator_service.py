@@ -60,10 +60,7 @@ async def generate_sample_testcase(
         db.merge(current_user)
         db.commit()
 
-        generator_result = await run_generator_in_sandbox(
-            problem=problem,
-            language="python"
-        )
+        generator_result = await run_generator_in_sandbox(problem=problem)
 
         log_user_event(user_id=current_user.id, user_email=current_user.email,
                        event_type=f"generator_result_{generator_result.get('status', 'unknown')}",

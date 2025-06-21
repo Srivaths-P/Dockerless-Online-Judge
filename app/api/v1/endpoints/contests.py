@@ -7,19 +7,19 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, verify_reload_token
-from app.ui.deps import get_current_user_from_cookie
 from app.db import models as db_models
 from app.schemas.contest import Contest, ContestMinimal
 from app.schemas.problem import ProblemPublic
 from app.services import contest_service
 from app.services import generator_service
+from app.ui.deps import get_current_user_from_cookie
 
 router = APIRouter()
 
 
 @router.post("/reload", status_code=status.HTTP_202_ACCEPTED)
 async def reload_contest_data(
-    _: bool = Depends(verify_reload_token)
+        _: bool = Depends(verify_reload_token)
 ):
     if 'GUNICORN_PID' in os.environ:
         try:

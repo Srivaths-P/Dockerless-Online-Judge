@@ -30,7 +30,14 @@ class Problem(BaseModel):
     allowed_languages: List[str]
 
     test_cases: List[TestCase] = []
+    validator_type: str = "diff"
+    validator_code: Optional[str] = None
+    validator_language: str = "python"
+    validator_time_limit_sec: int = 10
+    validator_memory_limit_mb: int = 256
+
     generator_code: Optional[str] = None
+    generator_language: str = "python"
     generator_time_limit_sec: Optional[float] = None
     generator_memory_limit_mb: Optional[int] = None
 

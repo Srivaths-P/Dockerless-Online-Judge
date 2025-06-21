@@ -14,6 +14,8 @@ The input will consist of a single line containing a string $S$ representing the
 
 Print "YES" if the string is a palindrome, otherwise print "NO".
 
+You may output the answer in any case (upper or lower). For example, the strings "yEs", "yes", "Yes", and "YES" will be recognized as positive answers.
+
 ### Constraints
 
 *   $1 \leq |S| \leq 10^5$, where $|S|$ is the length of the string $S$.

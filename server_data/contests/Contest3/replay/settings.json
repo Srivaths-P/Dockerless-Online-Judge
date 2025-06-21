@@ -3,6 +3,15 @@
   "time_limit_sec": 1,
   "memory_limit_mb": 64,
   "allowed_languages": ["python", "c++", "c"],
-  "submission_cooldown_sec": 10,
-  "generator_cooldown_sec": 1
+
+  "submission_cooldown_sec": 5,
+  "generator_cooldown_sec": 2,
+
+  "generator_language": "c++",
+  "generator_time_limit_sec": 3,
+  "generator_memory_limit_mb": 128,
+
+  "validator_language": "python",
+  "validator_time_limit_sec": 5,
+  "validator_memory_limit_mb": 64
 }
