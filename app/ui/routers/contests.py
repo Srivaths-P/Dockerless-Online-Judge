@@ -25,6 +25,8 @@ async def list_contests(request: Request,
         flash(request, "Please login to view contests.", "warning")
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
 
+    log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="view_contest_list")
+
     all_contests = contest_service.get_all_contests()
 
     upcoming_contests = []
@@ -46,8 +48,6 @@ async def list_contests(request: Request,
     upcoming_contests.sort(key=lambda c: c.get('start_time') or datetime.now(timezone.utc))
     active_contests.sort(key=lambda c: c.get('start_time') or datetime.now(timezone.utc), reverse=True)
     ended_contests.sort(key=lambda c: c.get('start_time') or datetime.now(timezone.utc), reverse=True)
-
-    log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="contest_list_view")
 
     from app.main import templates
     return templates.TemplateResponse("contests_list.html", {
@@ -71,6 +71,9 @@ async def contest_detail(request: Request, contest_id: str,
     contest = contest_service.get_contest_by_id(contest_id)
     if not contest:
         raise HTTPException(status_code=HTTP_404_NOT_FOUND, detail="Contest not found")
+
+    log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="view_contest_detail",
+                   details={"contest_id": contest_id})
 
     contest_dict = contest.model_dump()
     category, status_str = contest_service.get_contest_status_details(contest)
@@ -96,9 +99,6 @@ async def contest_detail(request: Request, contest_id: str,
     else:
         contest_dict["problems"] = []
 
-    log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="contest_view",
-                   details={"contest_id": contest_id})
-
     from app.main import templates
     return templates.TemplateResponse("contest_detail.html",
                                       {"request": request, "contest": contest_dict, "current_user": current_user})
@@ -118,14 +118,18 @@ async def problem_detail(request: Request, contest_id: str, problem_id: str,
             contest_id=contest_id, problem_id=problem_id
         )
     except HTTPException as e:
+        log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="view_problem_failed",
+                       details={"contest_id": contest_id, "problem_id": problem_id,
+                                "reason": e.detail, "status_code": e.status_code})
+
         flash(request, str(e.detail), "danger")
         return RedirectResponse(url=request.url_for("ui_contest_detail", contest_id=contest_id),
                                 status_code=HTTP_303_SEE_OTHER)
 
-    contest = contest_service.get_contest_by_id(contest_id)
-
-    log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="problem_view",
+    log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="view_problem_detail",
                    details={"contest_id": contest_id, "problem_id": problem_id})
+
+    contest = contest_service.get_contest_by_id(contest_id)
 
     from app.main import templates
     return templates.TemplateResponse("problem_detail.html", {

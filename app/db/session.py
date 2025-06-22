@@ -23,8 +23,8 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
         print("Session.py: Attempting to set PRAGMAs...")
         cursor.execute("PRAGMA journal_mode=WAL;")
         cursor.execute("PRAGMA foreign_keys=ON;")
-        cursor.execute("PRAGMA busy_timeout = 15000;")
-        print("Session.py: SQLite PRAGMAs (journal_mode=WAL, foreign_keys=ON, busy_timeout=15000) set.")
+        cursor.execute("PRAGMA busy_timeout = 30000;")
+        print("Session.py: SQLite PRAGMAs (journal_mode=WAL, foreign_keys=ON, busy_timeout=30000) set.")
     except Exception as e:
         print(f"Session.py: Failed to set SQLite PRAGMAs: {e}")
     finally:

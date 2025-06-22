@@ -10,7 +10,7 @@ from app.core.logging_config import log_user_event
 from app.db import models as db_models
 from app.db.session import get_db
 from app.schemas.submission import SubmissionCreate
-from app.services import contest_service, submission_service
+from app.services import submission_service
 from app.ui.deps import get_current_user_from_cookie, flash
 
 router = APIRouter()
@@ -30,47 +30,33 @@ async def handle_submission(
         flash(request, "Please login to submit.", "warning")
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=status.HTTP_303_SEE_OTHER)
 
-    try:
-        contest_service.get_contest_problem(contest_id=contest_id, problem_id=problem_id)
-    except HTTPException as e:
-        flash(request, f"Submission failed: {e.detail}", "danger")
-        return RedirectResponse(url=request.url_for("ui_problem_detail", contest_id=contest_id, problem_id=problem_id),
-                                status_code=status.HTTP_303_SEE_OTHER)
+    log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="attempt_submission",
+                   details={"contest_id": contest_id, "problem_id": problem_id,
+                            "language": language, "code_length": len(code)})
 
-    submission_data = SubmissionCreate(
-        problem_id=problem_id, contest_id=contest_id, language=language, code=code
-    )
     try:
         submission_info = await submission_service.create_submission(
             db=db,
-            submission_data=submission_data,
+            submission_data=SubmissionCreate(problem_id=problem_id, contest_id=contest_id, language=language,
+                                             code=code),
             current_user=current_user
         )
 
-        flash(request, f"Submission {submission_info.id[:8]}... received! Processing in background.",
-              "success")
-
-        log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_create",
-                       details={"contest_id": contest_id, "problem_id": problem_id, "language": language,
-                                "submission_id": submission_info.id})
-
+        flash(request, f"Submission {submission_info.id[:8]}... received! Processing in background.", "success")
         return RedirectResponse(url=request.url_for("ui_submission_detail", submission_id=submission_info.id),
                                 status_code=status.HTTP_303_SEE_OTHER)
 
     except HTTPException as e:
-        log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_create_failed",
-                       details={"contest_id": contest_id, "problem_id": problem_id, "language": language,
-                                "detail": e.detail, "status_code": e.status_code})
         flash(request, f"Submission error: {str(e.detail)}", "danger")
-
         return RedirectResponse(url=request.url_for("ui_problem_detail", contest_id=contest_id, problem_id=problem_id),
                                 status_code=status.HTTP_303_SEE_OTHER)
     except Exception as e:
-        log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_create_error",
-                       details={"contest_id": contest_id, "problem_id": problem_id, "language": language,
-                                "error": str(e)})
-        flash(request, f"An unexpected error occurred during submission: {str(e)}", "danger")
+        log_user_event(user_id=current_user.id, user_email=current_user.email,
+                       event_type="submission_failed_unexpected",
+                       details={"contest_id": contest_id, "problem_id": problem_id,
+                                "language": language, "error": str(e)})
 
+        flash(request, f"An unexpected error occurred during submission: {str(e)}", "danger")
         print(f"ERROR during submission creation: {e}")
         import traceback
         traceback.print_exc()
@@ -89,20 +75,21 @@ async def submission_detail(
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
 
     try:
-        submission_pydantic = submission_service.get_submission_by_id(db=db, submission_id=submission_id,
-                                                                      current_user=current_user)
+        submission = submission_service.get_submission_by_id(
+            db=db,
+            submission_id=submission_id,
+            current_user=current_user
+        )
 
-        log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_view",
-                       details={"submission_id": submission_id, "problem_id": submission_pydantic.problem_id,
-                                "contest_id": submission_pydantic.contest_id})
+        log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="view_submission_detail",
+                       details={"submission_id": submission_id, "problem_id": submission.problem_id,
+                                "contest_id": submission.contest_id, "status": submission.status.value})
 
         from app.main import templates
         return templates.TemplateResponse("submission_detail.html",
-                                          {"request": request, "submission": submission_pydantic,
+                                          {"request": request, "submission": submission,
                                            "current_user": current_user})
     except HTTPException as e:
-        log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_view_failed",
-                       details={"submission_id": submission_id, "detail": e.detail, "status_code": e.status_code})
         raise e
 
 
@@ -115,10 +102,9 @@ async def my_submissions(
         flash(request, "Please login to view your submissions.", "warning")
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
 
+    log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="view_submission_list")
+
     submissions_info = submission_service.get_all_submissions_for_user(db, current_user)
-
-    log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_list_view")
-
     from app.main import templates
     return templates.TemplateResponse("my_submissions.html", {"request": request, "submissions": submissions_info,
                                                               "current_user": current_user})

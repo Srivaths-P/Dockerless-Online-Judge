@@ -1,17 +1,15 @@
 {% extends "base.html" %}
 
-{% block title %}Home - Online Judge{% endblock %}
+{% block title %}Home - DOJ{% endblock %}
 
 {% block content %}
     <div class="px-4 py-5 my-5 text-center">
-        <h1 class="display-5 fw-bold">Welcome to the Online Judge</h1>
+        <h1 class="display-5 fw-bold">Welcome to DOJ</h1>
         <div class="col-lg-6 mx-auto">
             <p class="lead mb-4">
                 {% if current_user %}
                     You are logged in as <strong>{{ current_user.email }}</strong>.
-                    Ready to tackle some challenges?
                 {% else %}
-                    Hone your coding skills, solve problems, and climb the leaderboard.
                     Please login or register to get started.
                 {% endif %}
             </p>

@@ -1,100 +1,175 @@
 import os
+import random
+import uuid
+from locust import HttpUser, task, constant
 
-from locust import HttpUser, task, between
-
-EXISTING_CONTEST_ID = os.getenv("LOCUST_CONTEST_ID", "sample_contest_1")
-EXISTING_PROBLEM_ID = os.getenv("LOCUST_PROBLEM_ID", "problem_1")
 TARGET_HOST = os.getenv("LOCUST_TARGET_HOST", "http://127.0.0.1:8000")
+CONTEST_ID = os.getenv("LOCUST_CONTEST_ID", "Contest3")
+CHRONOS_ID = "chronos"
+REPLAY_ID = "replay"
 BASE_API_PATH = "/api/v1"
 
-PYTHON_TLE_CODE = "while True: pass"
-PYTHON_MLE_CODE = "a = []\nwhile True:\n    try:\n        # Allocate ~1MB chunks\n        a.append('A' * 1024 * 1024)\n    except MemoryError:\n        # Keep running even after MemoryError to ensure MLE triggers\n        while True: pass"
-PYTHON_RE_CODE_DIV_ZERO = "print(1/0)"
-PYTHON_WA_CODE = "print('This is the wrong answer!')"
+AC_CHRONOS_PYTHON = "s = input().strip().lower()\nprint('YES' if s == s[::-1] else 'NO')"
+AC_REPLAY_PYTHON = """
+from collections import Counter
+import random
+try:
+    freq = list(map(int, input().split()))
+    if len(freq) != 26:
+        print("-1")
+    else:
+        odd_chars = sum(1 for f in freq if f % 2 != 0)
+        if odd_chars > 1:
+            print("-1")
+        else:
+            ans, mid = "", ""
+            for i in range(26):
+                if freq[i] % 2 != 0:
+                    mid = chr(ord('a') + i)
+                ans += chr(ord('a') + i) * (freq[i] // 2)
+            res = list(ans)
+            random.shuffle(res)
+            ans = "".join(res)
+            print(ans + mid + ans[::-1])
+except:
+    print("-1")
+"""
+WA_CHRONOS_PYTHON = "print('This is the wrong answer')"
+WA_REPLAY_PYTHON = "print('notapalindrome')"
+TLE_PYTHON = "while True: pass"
+TLE_CPP = "#include <iostream>\nint main() { while(true); return 0; }"
+MLE_PYTHON = "a = []\nwhile True: a.append('A' * 1024 * 1024)"
+MLE_CPP = "#include <vector>\n#include <string>\nint main() { std::vector<std::string> v; while(true){ v.push_back(std::string(1024*1024, 'A')); } }"
+RE_PYTHON_DIV_ZERO = "print(1/0)"
+RE_CPP_SEGFAULT = "int main() { int *p = nullptr; *p = 42; return 0; }"
+FORK_BOMB_PYTHON = "import os\nwhile True: os.fork()"
+FORK_BOMB_CPP = "#include <unistd.h>\nint main() { while(true){ fork(); } return 0; }"
+CE_CPP = "int main() { int x = ; return 0; }"
+COMPILE_BOMB_CPP = "#include <iostream>\ntemplate<int N> struct C { C<N-1> c; };\ntemplate<> struct C<0> {};\nint main() { C<20000> c; std::cout << \"Done\"; return 0; }"
 
 
-class SubmissionUser(HttpUser):
-    wait_time = between(1, 3)
+class JudgingUser(HttpUser):
     host = TARGET_HOST
 
-    username = "asd@asd.com"
-    password = "asd@asd.com"
-
-    auth_token = None
+    wait_time = constant(5.1)
 
     def on_start(self):
-        print(f"User starting: Attempting login for {self.username}")
+        unique_id = uuid.uuid4().hex[:12]
+        self.username = f"locust_user_{unique_id}@example.com"
+        self.password = "password"
+        self.auth_token = None
 
-        login_payload = {"username": self.username, "password": self.password}
+        with self.client.post(
+                f"{BASE_API_PATH}/auth/register",
+                json={"email": self.username, "password": self.password},
+                name=f"{BASE_API_PATH}/auth/register",
+                catch_response=True
+        ) as response:
+            if response.status_code != 200:
+                response.failure(
+                    f"Registration failed for {self.username} with status {response.status_code}: {response.text}")
+                return
+
         with self.client.post(
                 f"{BASE_API_PATH}/auth/token",
-                data=login_payload,
-                catch_response=True,
-                name=f"{BASE_API_PATH}/auth/token (login)"
+                data={"username": self.username, "password": self.password},
+                name=f"{BASE_API_PATH}/auth/token (login after register)",
+                catch_response=True
         ) as response:
             if response.status_code == 200:
-                try:
-                    self.auth_token = response.json()["access_token"]
-                    print(f"Login successful for {self.username}")
-                    response.success()
-                except (KeyError, ValueError) as e:
-                    response.failure(
-                        f"Login succeeded but failed to parse token for {self.username}: {e} - Response: {response.text}")
-                    self.auth_token = None
+                self.auth_token = response.json().get("access_token")
+                if not self.auth_token:
+                    response.failure(f"Login successful for {self.username} but no token was returned.")
             else:
-                response.failure(f"Login failed for {self.username}: HTTP {response.status_code} - {response.text}")
-                self.auth_token = None
-                print(f"Login failed for {self.username}. This user instance will not submit.")
+                response.failure(
+                    f"Login failed for newly registered user {self.username} with status {response.status_code}: {response.text}")
 
-    def _get_auth_headers(self):
-        if self.auth_token:
-            return {"Authorization": f"Bearer {self.auth_token}"}
-        return {}
-
-    def _submit_code(self, language: str, code: str, expected_status_name: str):
+    def _submit_code(self, problem_id: str, language: str, code: str, name_suffix: str):
         if not self.auth_token:
-            self.environment.runner.stats.log_error(
-                "SUBMISSION_SKIPPED",
-                f"{BASE_API_PATH}/submissions ({expected_status_name}_{language})",
-                f"User {self.username} Not Logged In (Login Failed)"
-            )
             return
 
-        headers = self._get_auth_headers()
-        submission_payload = {
-            "problem_id": EXISTING_PROBLEM_ID,
-            "contest_id": EXISTING_CONTEST_ID,
+        headers = {"Authorization": f"Bearer {self.auth_token}"}
+        payload = {
+            "problem_id": problem_id,
+            "contest_id": CONTEST_ID,
             "language": language,
-            "code": code
+            "code": code,
         }
 
-        request_name = f"{BASE_API_PATH}/submissions ({expected_status_name}_{language})"
+        request_name = f"{BASE_API_PATH}/submissions ({problem_id}_{name_suffix})"
 
         with self.client.post(
                 f"{BASE_API_PATH}/submissions/",
-                json=submission_payload,
+                json=payload,
                 headers=headers,
-                catch_response=True,
-                name=request_name
+                name=request_name,
+                catch_response=True
         ) as response:
-            if response.status_code == 202:
-                response.success()
-            else:
-                response.failure(
-                    f"Submit {expected_status_name} failed with HTTP {response.status_code}: {response.text}")
+            if response.status_code != 202:
+                response.failure(f"Submit failed for {request_name} with status {response.status_code}")
 
-    @task(2)
+    @task(10)
+    def submit_chronos_ac(self):
+        self._submit_code(CHRONOS_ID, "python", AC_CHRONOS_PYTHON, "AC_PY")
+
+    @task(10)
+    def submit_replay_ac(self):
+        self._submit_code(REPLAY_ID, "python", AC_REPLAY_PYTHON, "AC_PY")
+
+    @task(5)
+    def submit_chronos_wa(self):
+        self._submit_code(CHRONOS_ID, "python", WA_CHRONOS_PYTHON, "WA_PY")
+
+    @task(5)
+    def submit_replay_wa(self):
+        self._submit_code(REPLAY_ID, "python", WA_REPLAY_PYTHON, "WA_PY")
+
+    @task(3)
     def submit_python_tle(self):
-        self._submit_code("python", PYTHON_TLE_CODE, "PY_TLE")
+        problem = random.choice([CHRONOS_ID, REPLAY_ID])
+        self._submit_code(problem, "python", TLE_PYTHON, "TLE_PY")
+
+    @task(3)
+    def submit_cpp_tle(self):
+        problem = random.choice([CHRONOS_ID, REPLAY_ID])
+        self._submit_code(problem, "c++", TLE_CPP, "TLE_CPP")
 
     @task(2)
     def submit_python_mle(self):
-        self._submit_code("python", PYTHON_MLE_CODE, "PY_MLE")
+        problem = random.choice([CHRONOS_ID, REPLAY_ID])
+        self._submit_code(problem, "python", MLE_PYTHON, "MLE_PY")
 
-    @task(1)
+    @task(2)
+    def submit_cpp_mle(self):
+        problem = random.choice([CHRONOS_ID, REPLAY_ID])
+        self._submit_code(problem, "c++", MLE_CPP, "MLE_CPP")
+
+    @task(2)
     def submit_python_re(self):
-        self._submit_code("python", PYTHON_RE_CODE_DIV_ZERO, "PY_RE")
+        problem = random.choice([CHRONOS_ID, REPLAY_ID])
+        self._submit_code(problem, "python", RE_PYTHON_DIV_ZERO, "RE_PY")
+
+    @task(2)
+    def submit_cpp_re(self):
+        problem = random.choice([CHRONOS_ID, REPLAY_ID])
+        self._submit_code(problem, "c++", RE_CPP_SEGFAULT, "RE_CPP")
 
     @task(1)
-    def submit_python_wa(self):
-        self._submit_code("python", PYTHON_WA_CODE, "PY_WA")
+    def submit_python_fork_bomb(self):
+        problem = random.choice([CHRONOS_ID, REPLAY_ID])
+        self._submit_code(problem, "python", FORK_BOMB_PYTHON, "FORK_BOMB_PY")
+
+    @task(1)
+    def submit_cpp_fork_bomb(self):
+        problem = random.choice([CHRONOS_ID, REPLAY_ID])
+        self._submit_code(problem, "c++", FORK_BOMB_CPP, "FORK_BOMB_CPP")
+
+    @task(2)
+    def submit_cpp_ce(self):
+        problem = random.choice([CHRONOS_ID, REPLAY_ID])
+        self._submit_code(problem, "c++", CE_CPP, "CE_CPP")
+
+    @task(1)
+    def submit_cpp_compile_bomb(self):
+        problem = random.choice([CHRONOS_ID, REPLAY_ID])
+        self._submit_code(problem, "c++", COMPILE_BOMB_CPP, "COMPILE_BOMB_CPP")

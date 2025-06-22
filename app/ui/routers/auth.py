@@ -12,6 +12,7 @@ from app.crud import crud_user
 from app.db.session import get_db
 from app.schemas.user import UserCreate, User as UserSchema, UserBase
 from app.ui.deps import flash, get_current_user_from_cookie
+from app.core.logging_config import log_user_event
 
 router = APIRouter()
 
@@ -31,8 +32,13 @@ async def handle_login(
 ):
     user = crud_user.user.authenticate(db=db, email=username, password=password)
     if not user or not crud_user.user.is_active(user):
+        log_user_event(user_id=None, user_email=username, event_type="login_failed",
+                       details={"reason": "Incorrect credentials or inactive user"})
+
         flash(request, "Incorrect email or password, or inactive account.", "danger")
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
+
+    log_user_event(user_id=user.id, user_email=user.email, event_type="user_login")
 
     access_token = create_access_token(data={"sub": user.email})
     response = RedirectResponse(url=request.url_for("ui_home"), status_code=HTTP_303_SEE_OTHER)
@@ -60,14 +66,22 @@ async def handle_register(
     try:
         UserBase(email=email)
     except ValidationError:
+        log_user_event(user_id=None, user_email=email, event_type="register_failed",
+                       details={"reason": "Invalid email format"})
+
         flash(request, "Invalid email format.", "danger")
         return RedirectResponse(url=request.url_for("ui_register_form"), status_code=HTTP_303_SEE_OTHER)
 
     if crud_user.user.get_by_email(db=db, email=email):
+        log_user_event(user_id=None, user_email=email, event_type="register_failed",
+                       details={"reason": "Email already registered"})
+
         flash(request, "Email already registered.", "danger")
         return RedirectResponse(url=request.url_for("ui_register_form"), status_code=HTTP_303_SEE_OTHER)
 
     new_user = crud_user.user.create(db, obj_in=UserCreate(email=email, password=password))
+    log_user_event(user_id=new_user.id, user_email=new_user.email, event_type="user_register")
+
     access_token = create_access_token(data={"sub": new_user.email})
     response = RedirectResponse(url=request.url_for("ui_home"), status_code=HTTP_303_SEE_OTHER)
     response.set_cookie(
@@ -79,7 +93,13 @@ async def handle_register(
 
 
 @router.get("/logout", name="ui_logout")
-async def logout(request: Request):
+async def logout(request: Request, current_user: Optional[UserSchema] = Depends(get_current_user_from_cookie)):
+    if not current_user:
+        flash(request, "You are not logged in.", "warning")
+        return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
+
+    log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="user_logout")
+    
     flash(request, "You have been logged out.", "info")
     response = RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
     response.delete_cookie("access_token_cookie")
