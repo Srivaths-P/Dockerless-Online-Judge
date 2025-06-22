@@ -1,4 +1,4 @@
-# [Dockerless Online Judge](doj.sriv.in) (DOJ)
+# [Dockerless Online Judge](https://doj.sriv.in/) (DOJ)
 
 [![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Framework](https://img.shields.io/badge/Framework-FastAPI-green.svg)](https://fastapi.tiangolo.com/)
