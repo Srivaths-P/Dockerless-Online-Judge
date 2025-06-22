@@ -86,8 +86,8 @@ async def submission_detail(
                                 "contest_id": submission.contest_id, "status": submission.status.value})
 
         from app.main import templates
-        return templates.TemplateResponse("submission_detail.html",
-                                          {"request": request, "submission": submission,
+        return templates.TemplateResponse(request, "submission_detail.html",
+                                          {"submission": submission,
                                            "current_user": current_user})
     except HTTPException as e:
         raise e
@@ -106,5 +106,5 @@ async def my_submissions(
 
     submissions_info = submission_service.get_all_submissions_for_user(db, current_user)
     from app.main import templates
-    return templates.TemplateResponse("my_submissions.html", {"request": request, "submissions": submissions_info,
-                                                              "current_user": current_user})
+    return templates.TemplateResponse(request, "my_submissions.html", {"submissions": submissions_info,
+                                                                       "current_user": current_user})

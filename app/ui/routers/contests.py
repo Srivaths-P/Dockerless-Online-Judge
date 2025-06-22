@@ -50,8 +50,7 @@ async def list_contests(request: Request,
     ended_contests.sort(key=lambda c: c.get('start_time') or datetime.now(timezone.utc), reverse=True)
 
     from app.main import templates
-    return templates.TemplateResponse("contests_list.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "contests_list.html", {
         "upcoming_contests": upcoming_contests,
         "active_contests": active_contests,
         "ended_contests": ended_contests,
@@ -100,8 +99,8 @@ async def contest_detail(request: Request, contest_id: str,
         contest_dict["problems"] = []
 
     from app.main import templates
-    return templates.TemplateResponse("contest_detail.html",
-                                      {"request": request, "contest": contest_dict, "current_user": current_user})
+    return templates.TemplateResponse(request, "contest_detail.html",
+                                      {"contest": contest_dict, "current_user": current_user})
 
 
 @router.get("/{contest_id}/problems/{problem_id}", response_class=HTMLResponse, name="ui_problem_detail")
@@ -132,8 +131,7 @@ async def problem_detail(request: Request, contest_id: str, problem_id: str,
     contest = contest_service.get_contest_by_id(contest_id)
 
     from app.main import templates
-    return templates.TemplateResponse("problem_detail.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "problem_detail.html", {
         "problem": problem,
         "contest_id": contest_id,
         "contest_title": contest.title if contest else contest_id,

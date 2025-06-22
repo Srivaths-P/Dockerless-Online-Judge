@@ -7,12 +7,12 @@ from sqlalchemy.orm import Session
 from starlette.status import HTTP_303_SEE_OTHER
 
 from app.core.config import settings
+from app.core.logging_config import log_user_event
 from app.core.security import create_access_token
 from app.crud import crud_user
 from app.db.session import get_db
 from app.schemas.user import UserCreate, User as UserSchema, UserBase
 from app.ui.deps import flash, get_current_user_from_cookie
-from app.core.logging_config import log_user_event
 
 router = APIRouter()
 
@@ -22,7 +22,7 @@ async def login_form(request: Request, current_user: Optional[UserSchema] = Depe
     if current_user:
         return RedirectResponse(url=request.url_for("ui_home"), status_code=HTTP_303_SEE_OTHER)
     from app.main import templates
-    return templates.TemplateResponse("login.html", {"request": request, "current_user": current_user})
+    return templates.TemplateResponse(request, "login.html", {"current_user": current_user})
 
 
 @router.post("/login", name="ui_handle_login")
@@ -30,7 +30,9 @@ async def handle_login(
         request: Request, db: Session = Depends(get_db),
         username: str = Form(...), password: str = Form(...)
 ):
+    print(f"HANDLE LOGIN: Attempting to auth user '{username}' with password '{password}'")
     user = crud_user.user.authenticate(db=db, email=username, password=password)
+    print(f"HANDLE LOGIN: crud.authenticate returned: {user}")
     if not user or not crud_user.user.is_active(user):
         log_user_event(user_id=None, user_email=username, event_type="login_failed",
                        details={"reason": "Incorrect credentials or inactive user"})
@@ -55,7 +57,7 @@ async def register_form(request: Request, current_user: Optional[UserSchema] = D
     if current_user:
         return RedirectResponse(url=request.url_for("ui_home"), status_code=HTTP_303_SEE_OTHER)
     from app.main import templates
-    return templates.TemplateResponse("register.html", {"request": request, "current_user": current_user})
+    return templates.TemplateResponse(request, "register.html", {"current_user": current_user})
 
 
 @router.post("/register", name="ui_handle_register")
@@ -99,7 +101,7 @@ async def logout(request: Request, current_user: Optional[UserSchema] = Depends(
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
 
     log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="user_logout")
-    
+
     flash(request, "You have been logged out.", "info")
     response = RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
     response.delete_cookie("access_token_cookie")

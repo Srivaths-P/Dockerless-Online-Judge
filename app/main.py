@@ -141,8 +141,9 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     if exc.status_code == status.HTTP_404_NOT_FOUND:
         try:
             return templates.TemplateResponse(
+                request,
                 "404.html",
-                {"request": request, "current_user": current_user, "detail": exc.detail},
+                {"current_user": current_user, "detail": exc.detail},
                 status_code=status.HTTP_404_NOT_FOUND
             )
         except Exception as template_error:
@@ -198,4 +199,4 @@ async def generic_exception_handler(request: Request, exc: Exception):
 @app.get("/", response_class=HTMLResponse, name="ui_home")
 async def root_ui(request: Request, db: Session = Depends(get_db)):
     current_user = await get_current_user_from_cookie(request, db=db)
-    return templates.TemplateResponse("home.html", {"request": request, "current_user": current_user})
+    return templates.TemplateResponse(request, "home.html", {"current_user": current_user})

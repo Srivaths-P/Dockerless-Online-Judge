@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.problem import ProblemMinimal
 
@@ -14,8 +14,7 @@ class ContestBase(BaseModel):
     duration_minutes: Optional[int] = None
     allow_upsolving: bool = True
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Contest(ContestBase):
@@ -28,5 +27,4 @@ class ContestMinimal(BaseModel):
     start_time: Optional[datetime] = None
     duration_minutes: Optional[int] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class SubmissionStatus(str, Enum):
@@ -50,8 +50,7 @@ class SubmissionInDBBase(SubmissionBase):
     results: List[TestCaseResult] = []
     user_email: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Submission(SubmissionInDBBase):
