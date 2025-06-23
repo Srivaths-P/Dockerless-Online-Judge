@@ -67,7 +67,7 @@ async def run_sandboxed(
             bwrap_args_c = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
                             "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
                             "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                            "--unshare-user", "--unshare-pid", "--unshare-net",
+                            "--unshare-pid", "--unshare-net",
                             PYTHON3, "/sandbox/wrapper.py"] + cfg["compile"]
             cres = await asyncio.get_running_loop().run_in_executor(
                 blocking_executor, _systemd_bwrap_run, unit_c, 30, 512, bwrap_args_c
@@ -104,7 +104,7 @@ async def run_sandboxed(
         bwrap_args_e = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
                         "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
                         "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                        "--unshare-user", "--unshare-pid", "--unshare-net"]
+                        "--unshare-pid", "--unshare-net"]
 
         if extra_bind_files:
             for host_path, sandbox_path in extra_bind_files:

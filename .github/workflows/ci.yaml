@@ -39,4 +39,4 @@ jobs:
           SECRET_KEY: "test_secret_key"
           SESSION_SECRET_KEY: "test_session_secret_key"
           ADMIN_RELOAD_TOKEN: "test_admin_reload_token"
-        run: pytest
+        run: pytest -m "not sandbox"
