@@ -2,6 +2,8 @@ import os
 import subprocess
 from typing import Any, Dict
 
+SUPPORTED_IDE_LANGUAGES = ["python", "c++", "c"]
+
 BWRAP = "/usr/bin/bwrap"
 PYTHON3 = "/usr/bin/python3"
 GCC = "/usr/bin/gcc"

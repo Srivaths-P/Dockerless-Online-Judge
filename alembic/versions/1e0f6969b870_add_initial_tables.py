@@ -1,16 +1,8 @@
-"""create initial tables
-
-Revision ID: 86efb0f4237d # Keeping the original ID, assumes this is the replacement first script
-Revises:
-Create Date: 2025-05-13 00:51:17.774031 # Keeping original date
-
-"""
 from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
 
-# revision identifiers, used by Alembic.
 revision: str = '86efb0f4237d'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
@@ -22,11 +14,10 @@ def upgrade() -> None:
     op.create_table('users',
                     sa.Column('id', sa.Integer(), nullable=False),
                     sa.Column('email', sa.String(), nullable=False),
-                    sa.Column('hashed_password', sa.String(), nullable=False),
+                    sa.Column('hashed_password', sa.String(), nullable=True),
                     sa.Column('is_active', sa.Boolean(), nullable=True),
                     sa.Column('created_at', sa.DateTime(timezone=True), nullable=True),
                     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True),
-                    # Added rate limit columns
                     sa.Column('last_submission_at', sa.DateTime(timezone=True), nullable=True),
                     sa.Column('last_generation_at', sa.DateTime(timezone=True), nullable=True),
                     sa.PrimaryKeyConstraint('id', name=op.f('pk_users'))

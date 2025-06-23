@@ -1,19 +1,17 @@
 import os
 import traceback
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
 
-import markdown
 from fastapi import FastAPI, Request, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette import status
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
 
+from app.core.templating import templates
 from app.api.v1.api import api_router as api_v1_router
 from app.core.config import settings
 from app.db.session import get_db
@@ -23,6 +21,7 @@ from app.ui.deps import get_current_user_from_cookie, get_flashed_messages, flas
 from app.ui.routers import auth as ui_auth_router
 from app.ui.routers import contests as ui_contests_router
 from app.ui.routers import submissions as ui_submissions_router
+from app.ui.routers import ide as ui_ide_router
 
 
 @asynccontextmanager
@@ -79,43 +78,12 @@ if os.path.exists(STATIC_DIR):
 else:
     print(f"Warning: Static directory not found at {STATIC_DIR}. Static files will not be served.")
 
-TEMPLATES_DIR = os.path.join(_PROJECT_ROOT, "templates")
-if not os.path.exists(TEMPLATES_DIR):
-    print(f"CRITICAL ERROR: Templates directory not found at {TEMPLATES_DIR}.")
-
-templates = Jinja2Templates(directory=TEMPLATES_DIR)
-
-templates.env.globals["get_flashed_messages"] = get_flashed_messages
-templates.env.globals["G"] = {"datetime_class": datetime, "timedelta_class": timedelta}
-
-
-def markdown_filter(text):
-    if text is None: return ""
-    return markdown.markdown(
-        text,
-        extensions=[
-            "fenced_code",
-            "tables",
-            "sane_lists",
-            "extra",
-            "codehilite",
-            "pymdownx.arithmatex"
-
-        ], extension_configs={
-            "pymdownx.arithmatex": {
-                "generic": True
-            }
-        }
-    )
-
-
-templates.env.filters["markdown"] = markdown_filter
-
 app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET_KEY)
 app.include_router(api_v1_router, prefix="/api/v1", tags=["API"])
 app.include_router(ui_auth_router.router, prefix="/auth", tags=["UI Auth"])
 app.include_router(ui_contests_router.router, prefix="/contests", tags=["UI Contests"])
 app.include_router(ui_submissions_router.router, prefix="/my_submissions", tags=["UI Submissions"])
+app.include_router(ui_ide_router.router, prefix="/ide", tags=["UI IDE"])
 
 
 @app.exception_handler(StarletteHTTPException)

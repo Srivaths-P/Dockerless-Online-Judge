@@ -7,6 +7,7 @@ from starlette import status
 from starlette.status import HTTP_303_SEE_OTHER
 
 from app.core.logging_config import log_user_event
+from app.core.templating import templates
 from app.db import models as db_models
 from app.db.session import get_db
 from app.schemas.submission import SubmissionCreate
@@ -27,8 +28,9 @@ async def handle_submission(
         current_user: Optional[db_models.User] = Depends(get_current_user_from_cookie)
 ):
     if not current_user:
-        flash(request, "Please login to submit.", "warning")
-        return RedirectResponse(url=request.url_for("ui_login_form"), status_code=status.HTTP_303_SEE_OTHER)
+        login_url = request.url_for("ui_login_form")
+        next_url = request.url_for("ui_problem_detail", contest_id=contest_id, problem_id=problem_id)
+        return RedirectResponse(url=f"{login_url}?next={next_url}", status_code=status.HTTP_303_SEE_OTHER)
 
     log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="attempt_submission",
                    details={"contest_id": contest_id, "problem_id": problem_id,
@@ -71,8 +73,8 @@ async def submission_detail(
         current_user: Optional[db_models.User] = Depends(get_current_user_from_cookie)
 ):
     if not current_user:
-        flash(request, "Please login to view submission details.", "warning")
-        return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
+        login_url = request.url_for("ui_login_form")
+        return RedirectResponse(url=f"{login_url}?next={request.url.path}", status_code=HTTP_303_SEE_OTHER)
 
     try:
         submission = submission_service.get_submission_by_id(
@@ -85,9 +87,8 @@ async def submission_detail(
                        details={"submission_id": submission_id, "problem_id": submission.problem_id,
                                 "contest_id": submission.contest_id, "status": submission.status.value})
 
-        from app.main import templates
-        return templates.TemplateResponse(request, "submission_detail.html",
-                                          {"submission": submission,
+        return templates.TemplateResponse("submission_detail.html",
+                                          {"request": request, "submission": submission,
                                            "current_user": current_user})
     except HTTPException as e:
         raise e
@@ -99,12 +100,11 @@ async def my_submissions(
         current_user: Optional[db_models.User] = Depends(get_current_user_from_cookie)
 ):
     if not current_user:
-        flash(request, "Please login to view your submissions.", "warning")
-        return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
+        login_url = request.url_for("ui_login_form")
+        return RedirectResponse(url=f"{login_url}?next={request.url.path}", status_code=HTTP_303_SEE_OTHER)
 
     log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="view_submission_list")
 
     submissions_info = submission_service.get_all_submissions_for_user(db, current_user)
-    from app.main import templates
-    return templates.TemplateResponse(request, "my_submissions.html", {"submissions": submissions_info,
-                                                                       "current_user": current_user})
+    return templates.TemplateResponse("my_submissions.html", {"request": request, "submissions": submissions_info,
+                                                              "current_user": current_user})

@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 from starlette.status import HTTP_404_NOT_FOUND, HTTP_303_SEE_OTHER
 
 from app.core.logging_config import log_user_event
+from app.core.templating import templates
 from app.crud import crud_submission
 from app.db import models as db_models
 from app.db.session import get_db
 from app.services import contest_service
-from app.ui.deps import get_current_user_from_cookie, flash
+from app.ui.deps import get_current_user_from_cookie
 
 router = APIRouter()
 
@@ -22,8 +23,8 @@ async def list_contests(request: Request,
                         db: Session = Depends(get_db)
                         ):
     if not current_user:
-        flash(request, "Please login to view contests.", "warning")
-        return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
+        login_url = request.url_for("ui_login_form")
+        return RedirectResponse(url=f"{login_url}?next={request.url.path}", status_code=HTTP_303_SEE_OTHER)
 
     log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="view_contest_list")
 
@@ -49,8 +50,8 @@ async def list_contests(request: Request,
     active_contests.sort(key=lambda c: c.get('start_time') or datetime.now(timezone.utc), reverse=True)
     ended_contests.sort(key=lambda c: c.get('start_time') or datetime.now(timezone.utc), reverse=True)
 
-    from app.main import templates
-    return templates.TemplateResponse(request, "contests_list.html", {
+    return templates.TemplateResponse("contests_list.html", {
+        "request": request,
         "upcoming_contests": upcoming_contests,
         "active_contests": active_contests,
         "ended_contests": ended_contests,
@@ -64,8 +65,8 @@ async def contest_detail(request: Request, contest_id: str,
                          db: Session = Depends(get_db)
                          ):
     if not current_user:
-        flash(request, "Please login to view contest details.", "warning")
-        return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
+        login_url = request.url_for("ui_login_form")
+        return RedirectResponse(url=f"{login_url}?next={request.url.path}", status_code=HTTP_303_SEE_OTHER)
 
     contest = contest_service.get_contest_by_id(contest_id)
     if not contest:
@@ -98,9 +99,8 @@ async def contest_detail(request: Request, contest_id: str,
     else:
         contest_dict["problems"] = []
 
-    from app.main import templates
-    return templates.TemplateResponse(request, "contest_detail.html",
-                                      {"contest": contest_dict, "current_user": current_user})
+    return templates.TemplateResponse("contest_detail.html",
+                                      {"request": request, "contest": contest_dict, "current_user": current_user})
 
 
 @router.get("/{contest_id}/problems/{problem_id}", response_class=HTMLResponse, name="ui_problem_detail")
@@ -109,8 +109,8 @@ async def problem_detail(request: Request, contest_id: str, problem_id: str,
                          db: Session = Depends(get_db)
                          ):
     if not current_user:
-        flash(request, "Please login to view problem details.", "warning")
-        return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
+        login_url = request.url_for("ui_login_form")
+        return RedirectResponse(url=f"{login_url}?next={request.url.path}", status_code=HTTP_303_SEE_OTHER)
 
     try:
         problem = contest_service.get_contest_problem(
@@ -121,7 +121,6 @@ async def problem_detail(request: Request, contest_id: str, problem_id: str,
                        details={"contest_id": contest_id, "problem_id": problem_id,
                                 "reason": e.detail, "status_code": e.status_code})
 
-        flash(request, str(e.detail), "danger")
         return RedirectResponse(url=request.url_for("ui_contest_detail", contest_id=contest_id),
                                 status_code=HTTP_303_SEE_OTHER)
 
@@ -130,8 +129,8 @@ async def problem_detail(request: Request, contest_id: str, problem_id: str,
 
     contest = contest_service.get_contest_by_id(contest_id)
 
-    from app.main import templates
-    return templates.TemplateResponse(request, "problem_detail.html", {
+    return templates.TemplateResponse("problem_detail.html", {
+        "request": request,
         "problem": problem,
         "contest_id": contest_id,
         "contest_title": contest.title if contest else contest_id,

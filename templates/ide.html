@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+    <h2 class="mb-0">DOJ Code Editor</h2>
+    <div class="d-flex align-items-center">
+        <label class="form-label me-2 mb-0 small" for="languageSelect">Language:</label>
+        <select class="form-select form-select-sm" id="languageSelect" name="language" style="width: auto;">
+            {% for lang in supported_languages %}
+                <option value="{{ lang }}"
+                        data-codemirror-mode="{% set lower_lang = lang.lower() %}{% if lower_lang == 'python' %}python{% elif lower_lang == 'c++' %}text/x-c++src{% elif lower_lang == 'c' %}text/x-csrc{% else %}clike{% endif %}">
+                    {{ lang|title }}
+                </option>
+            {% endfor %}
+        </select>
+        <button id="runBtn" class="btn btn-primary ms-3">
+            <span id="runBtnText"><i class="bi bi-play-fill"></i> Run Code</span>
+            <span id="runSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+            <span id="runLoadingText" class="d-none">Running...</span>
+        </button>
+    </div>
+</div>
+
+<div class="row g-4 ide-row">
+    <div class="col-lg-8">
+        <div class="card shadow-sm ide-code-card">
+            <div class="card-body">
+                <textarea id="codeTextarea" name="code"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="ide-io-column h-100">
+            <div class="card shadow-sm ide-io-card input-card">
+                <div class="card-header"><h5 class="mb-0">Standard Input (stdin)</h5></div>
+                <div class="card-body">
+                    <textarea id="inputTextarea" class="form-control"
+                              placeholder="Enter your input here..."
+                              style="font-family: monospace;"></textarea>
+                </div>
+            </div>
+
+            <div class="card shadow-sm ide-io-card output-card">
+                <div class="card-header"><h5 class="mb-0">Output</h5></div>
+                <div class="card-body" id="output-container">
+                    <div id="output-placeholder" class="text-center text-muted p-4 d-flex flex-column justify-content-center align-items-center h-100">
+                        <i class="bi bi-box fs-1"></i>
+                        <p class="mt-2">Output will appear here after running your code.</p>
+                    </div>
+
+                    <div id="results-display" class="d-none h-100" style="display: flex; flex-direction: column;">
+                        <div class="pb-3 border-bottom">
+                            <div class="row">
+                                <div class="col-6"><small><strong>Status:</strong></small></div>
+                                    <div class="col-6 text-end"><small><span id="status-badge" class="badge"></span></small></div>
+
+                                <div class="col-6"><small><strong>Time:</strong></small></div>
+                                <div class="col-6 text-end"><small><span id="time-taken"></span> ms</small></div>
+
+                                <div class="col-6"><small><strong>Memory:</strong></small></div>
+                                <div class="col-6 text-end"><small><span id="memory-used"></span> KB</small></div>
+                            </div>
+                        </div>
+
+                        <div class="p-3 flex-grow-1" style="overflow-y: auto;">
+                            <div id="compile-error-section" class="d-none">
+                                <h6 class="text-warning mb-1">Compilation Error</h6>
+                                <pre class="bg-dark p-2 rounded small"><code id="compile-error-output"></code></pre>
+                            </div>
+                            <div id="stdout-section" class="d-none">
+                                <h6 class="mb-1">Standard Output (stdout)</h6>
+                                <pre class="bg-dark p-2 rounded small"><code id="stdout-output"></code></pre>
+                            </div>
+                            <div id="stderr-section" class="d-none">
+                                <h6 class="mb-1">Standard Error (stderr)</h6>
+                                <pre class="bg-dark p-2 rounded small"><code id="stderr-output"></code></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block extra_js %}
+{{ super() }}
+<script>
+    let editor;
+    document.addEventListener('DOMContentLoaded', function () {
+        const codeTextarea = document.getElementById('codeTextarea');
+        const languageSelect = document.getElementById('languageSelect');
+        const inputTextarea = document.getElementById('inputTextarea');
+        const codeStorageKey = 'doj-ide-code';
+        const langStorageKey = 'doj-ide-lang';
+        const inputStorageKey = 'doj-ide-input';
+        function saveState() {
+            if (editor) {
+                localStorage.setItem(codeStorageKey, editor.getValue());
+                localStorage.setItem(langStorageKey, languageSelect.value);
+                localStorage.setItem(inputStorageKey, inputTextarea.value);
+            }
+        }
+        function loadState() {
+            const savedCode = localStorage.getItem(codeStorageKey);
+            const savedLang = localStorage.getItem(langStorageKey);
+            const savedInput = localStorage.getItem(inputStorageKey);
+            if (savedLang) { languageSelect.value = savedLang; }
+            if (savedCode) { codeTextarea.value = savedCode; }
+            if (savedInput) { inputTextarea.value = savedInput; }
+        }
+        function getCodeMirrorMode(lang) {
+            const option = languageSelect.querySelector(`option[value="${lang}"]`);
+            return option ? option.dataset.codemirrorMode : 'clike';
+        }
+        function initializeEditor(mode) {
+            if (editor) editor.toTextArea();
+            editor = CodeMirror.fromTextArea(codeTextarea, {
+                lineNumbers: true, mode: mode, theme: "material-darker",
+                matchBrackets: true, autoCloseBrackets: true, styleActiveLine: true,
+                indentUnit: 4, smartIndent: true, tabSize: 4, indentWithTabs: false,
+            });
+            let timeout;
+            editor.on('change', () => {
+                clearTimeout(timeout);
+                timeout = setTimeout(saveState, 300);
+            });
+            editor.on('blur', saveState);
+        }
+        if (codeTextarea && languageSelect) {
+            loadState();
+            initializeEditor(getCodeMirrorMode(languageSelect.value));
+            languageSelect.addEventListener('change', function() {
+                const selectedMode = getCodeMirrorMode(this.value);
+                initializeEditor(selectedMode);
+                editor.setValue(localStorage.getItem(codeStorageKey) || "");
+                saveState();
+            });
+            inputTextarea.addEventListener('input', saveState);
+        }
+        const runBtn = document.getElementById('runBtn');
+        runBtn.addEventListener('click', async function () {
+            const runBtnText = document.getElementById('runBtnText');
+            const runSpinner = document.getElementById('runSpinner');
+            const runLoadingText = document.getElementById('runLoadingText');
+            const outputPlaceholder = document.getElementById('output-placeholder');
+            const resultsDisplay = document.getElementById('results-display');
+            const statusBadge = document.getElementById('status-badge');
+            const timeTaken = document.getElementById('time-taken');
+            const memoryUsed = document.getElementById('memory-used');
+            const compileErrorSection = document.getElementById('compile-error-section');
+            const compileErrorOutput = document.getElementById('compile-error-output');
+            const stdoutSection = document.getElementById('stdout-section');
+            const stdoutOutput = document.getElementById('stdout-output');
+            const stderrSection = document.getElementById('stderr-section');
+            const stderrOutput = document.getElementById('stderr-output');
+            runBtn.disabled = true;
+            runBtnText.style.display = 'none';
+            runSpinner.classList.remove('d-none');
+            runLoadingText.classList.remove('d-none');
+            outputPlaceholder.classList.add('d-none');
+            resultsDisplay.classList.add('d-none');
+            const payload = {
+                code: editor.getValue(),
+                language: languageSelect.value,
+                input_str: inputTextarea.value
+            };
+            try {
+                const response = await fetch('/api/v1/ide/run', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload),
+                    credentials: 'include'
+                });
+                const result = await response.json();
+                resultsDisplay.classList.remove('d-none');
+                compileErrorSection.classList.add('d-none');
+                stdoutSection.classList.add('d-none');
+                stderrSection.classList.add('d-none');
+                if (!response.ok) {
+                    statusBadge.textContent = `Error: ${response.status}`;
+                    statusBadge.className = 'badge bg-danger';
+                    stdoutOutput.textContent = result.detail || 'An unknown server error occurred.';
+                    stdoutSection.classList.remove('d-none');
+                    timeTaken.textContent = 'N/A';
+                    memoryUsed.textContent = 'N/A';
+                    return;
+                }
+                statusBadge.textContent = result.status.replace(/_/g, ' ').toUpperCase();
+                statusBadge.className = 'badge rounded-pill status-' + result.status.toUpperCase();
+                timeTaken.textContent = result.execution_time_ms.toFixed(2);
+                memoryUsed.textContent = result.memory_used_kb;
+                if (result.compilation_stderr) {
+                    compileErrorOutput.textContent = result.compilation_stderr;
+                    compileErrorSection.classList.remove('d-none');
+                }
+                if (result.stdout) {
+                    stdoutOutput.textContent = result.stdout;
+                    stdoutSection.classList.remove('d-none');
+                }
+                if (result.stderr) {
+                    stderrOutput.textContent = result.stderr;
+                    stderrSection.classList.remove('d-none');
+                }
+            } catch (error) {
+                resultsDisplay.classList.remove('d-none');
+                statusBadge.textContent = 'Client Error';
+                statusBadge.className = 'badge bg-danger';
+                stdoutOutput.textContent = 'Could not connect to the server. ' + error;
+                stdoutSection.classList.remove('d-none');
+            } finally {
+                runBtn.disabled = false;
+                runBtnText.style.display = 'inline';
+                runSpinner.classList.add('d-none');
+                runLoadingText.classList.add('d-none');
+            }
+        });
+    });
+</script>
+{% endblock %}

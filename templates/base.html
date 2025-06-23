@@ -19,18 +19,18 @@
 
     <link href="/static/style.css" rel="stylesheet">
 
-        <script>
-      MathJax = {
-        tex: {
-          inlineMath: [['$', '$'], ['\\(', '\\)']],
-          displayMath: [['$$', '$$'], ['\\[', '\\]']],
-          processEscapes: true,
-          processEnvironments: true
-        },
-        options: {
-          skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
-        }
-      };
+    <script>
+        MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']],
+                processEscapes: true,
+                processEnvironments: true
+            },
+            options: {
+                skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+            }
+        };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script"></script>
 
@@ -46,7 +46,7 @@
             flex-direction: column;
         }
 
-        main.container {
+        main {
             flex-grow: 1;
             margin-top: 20px;
             margin-bottom: 20px;
@@ -74,10 +74,7 @@
             background-color: #28a745;
         }
 
-        .status-WRONG_ANSWER,
-        .status-TIME_LIMIT_EXCEEDED,
-        .status-RUNTIME_ERROR,
-        .status-MEMORY_LIMIT_EXCEEDED {
+        .status-WRONG_ANSWER, .status-TIME_LIMIT_EXCEEDED, .status-RUNTIME_ERROR, .status-MEMORY_LIMIT_EXCEEDED {
             background-color: #dc3545;
         }
 
@@ -86,9 +83,7 @@
             color: black;
         }
 
-        .status-INTERNAL_ERROR,
-        .status-PENDING,
-        .status-RUNNING {
+        .status-INTERNAL_ERROR, .status-PENDING, .status-RUNNING {
             background-color: #6c757d;
         }
 
@@ -124,22 +119,15 @@
             color: #adb5bd;
         }
 
-        textarea.code-editor {
-            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
-            font-size: 0.9em;
-            line-height: 1.5;
-            background-color: #272822;
-            color: #f8f8f2;
-            border: 1px solid #495057;
-            min-height: 300px;
-            tab-size: 4;
+        @media (min-width: 1200px) {
+            .container {
+                max-width: 90%;
+            }
         }
 
         .CodeMirror {
             border: 1px solid #495057;
             border-radius: 0.3rem;
-            height: auto;
-            min-height: 300px;
             font-size: 0.9em;
             tab-size: 4;
         }
@@ -151,7 +139,6 @@
         textarea.CodeMirror-state {
             display: none;
         }
-
 
         .test-case-result {
             padding: 1rem;
@@ -175,10 +162,7 @@
             border-left: 5px solid #5cb85c;
         }
 
-        .test-case-result.status-WRONG_ANSWER,
-        .test-case-result.status-TIME_LIMIT_EXCEEDED,
-        .test-case-result.status-MEMORY_LIMIT_EXCEEDED,
-        .test-case-result.status-RUNTIME_ERROR {
+        .test-case-result.status-WRONG_ANSWER, .test-case-result.status-TIME_LIMIT_EXCEEDED, .test-case-result.status-MEMORY_LIMIT_EXCEEDED, .test-case-result.status-RUNTIME_ERROR {
             background-color: rgba(217, 83, 79, 0.1);
             border-left: 5px solid #d9534f;
         }
@@ -191,6 +175,156 @@
         .test-case-result.status-INTERNAL_ERROR {
             background-color: rgba(119, 119, 119, 0.1);
             border-left: 5px solid #777777;
+        }
+
+        .CodeMirror, .CodeMirror-scroll {
+            min-height: 65vh;
+            height: 100%;
+        }
+
+        .ide-code-card, .ide-code-card .card-body {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            height: 100%;
+        }
+
+        #output-container pre {
+            max-height: 25vh;
+            overflow-y: auto;
+        }
+
+        .ide-row {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .ide-row > [class*='col-'] {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ide-code-card {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ide-code-card .card-body {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+        }
+
+        .CodeMirror {
+            border: 1px solid #495057;
+            border-radius: 0.3rem;
+            height: 75vh;
+            font-size: 0.9em;
+            tab-size: 4;
+        }
+
+        .io-scroll-container {
+            max-height: calc(100vh - 150px);
+            overflow-y: auto;
+        }
+
+        .ide-row {
+            display: flex;
+            flex-wrap: wrap;
+            height: 80vh;
+        }
+
+        .ide-row > [class*='col-'] {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            flex-shrink: 1;
+        }
+
+        .ide-code-card {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ide-code-card .card-body {
+            flex-grow: 1;
+            padding: 0;
+        }
+
+        .ide-code-card .CodeMirror {
+            height: 100%;
+        }
+
+        .ide-io-column {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .ide-io-card {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .ide-io-card .card-body {
+            flex-grow: 1;
+            padding: 0;
+            display: flex;
+        }
+
+        .ide-io-column {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            height: 100%;
+        }
+
+        .ide-io-card.input-card {
+            flex: 0 0 25%;
+        }
+
+        .ide-io-card.output-card {
+            display: flex;
+            flex: 1 1 75%;
+            min-height: 0;
+        }
+
+        .ide-io-card .card-body {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ide-io-card #results-display {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .ide-io-card #results-display .flex-grow-1 {
+            overflow-y: auto;
+        }
+
+        .ide-io-card textarea,
+        .ide-io-card #output-container {
+            flex-grow: 1;
+            width: 100%;
+            border: none;
+            resize: none;
+        }
+
+        .ide-io-card #output-container {
+            padding: 1rem;
+            overflow-y: auto;
+        }
+
+        #output-container pre {
+            max-height: none;
+            overflow-y: auto;
         }
     </style>
 </head>
@@ -211,38 +345,40 @@
                        href="{{ url_for('ui_home') }}">Home</a>
                 </li>
                 {% if current_user %}
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.url.path.startswith(url_for('ui_list_contests')|string) %}active{% endif %}"
-                           href="{{ url_for('ui_list_contests') }}">Contests</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.url.path.startswith(url_for('ui_my_submissions')|string) %}active{% endif %}"
-                           href="{{ url_for('ui_my_submissions') }}">My Submissions</a>
-                    </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.url.path.startswith(url_for('ui_list_contests')|string) %}active{% endif %}"
+                       href="{{ url_for('ui_list_contests') }}">Contests</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.url.path.startswith(url_for('ui_my_submissions')|string) %}active{% endif %}"
+                       href="{{ url_for('ui_my_submissions') }}">My Submissions</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link {% if request.url.path.startswith(url_for('ui_ide')|string) %}active{% endif %}"
+                       href="{{ url_for('ui_ide') }}">IDE</a>
+                </li>
                 {% endif %}
             </ul>
             <ul class="navbar-nav ms-auto mb-2 mb-md-0">
                 {% if current_user %}
-                    <li class="nav-item dropdown">
-                        <a aria-expanded="false" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#"
-                           id="navbarDropdownUser" role="button">
-                            <i class="bi bi-person-circle"></i> {{ current_user.email if current_user.email else 'User' }}
-                        </a>
-                        <ul aria-labelledby="navbarDropdownUser"
-                            class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
-                            <li><a class="dropdown-item" href="{{ url_for('ui_logout') }}"><i
-                                    class="bi bi-box-arrow-right"></i> Logout</a></li>
-                        </ul>
-                    </li>
+                <li class="nav-item dropdown">
+                    <a aria-expanded="false" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#"
+                       id="navbarDropdownUser" role="button">
+                        <i class="bi bi-person-circle"></i> {{ current_user.email if current_user.email else 'User' }}
+                    </a>
+                    <ul aria-labelledby="navbarDropdownUser"
+                        class="dropdown-menu dropdown-menu-dark dropdown-menu-end">
+                        <li><a class="dropdown-item" href="{{ url_for('ui_logout') }}"><i
+                                class="bi bi-box-arrow-right"></i> Logout</a></li>
+                    </ul>
+                </li>
                 {% else %}
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.url.path == url_for('ui_login_form')|string %}active{% endif %}"
-                           href="{{ url_for('ui_login_form') }}">Login</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.url.path == url_for('ui_register_form')|string %}active{% endif %}"
-                           href="{{ url_for('ui_register_form') }}">Register</a>
-                    </li>
+                <li class="nav-item">
+                    {% set next_url = request.query_params.get('next', '') %}
+                    <a class="btn btn-primary" href="{{ url_for('ui_login_form') }}">
+                        <i class="bi bi-google"></i> Sign in
+                    </a>
+                </li>
                 {% endif %}
             </ul>
         </div>
@@ -251,25 +387,25 @@
 
 <main class="container flex-shrink-0">
     {% with messages = get_flashed_messages(request) %}
-        {% if messages %}
-            <div class="flash-messages-container">
-                {% for msg in messages %}
-                    <div class="alert alert-{{ msg.category }} alert-dismissible fade show mt-3" role="alert">
-                        {{ msg.message }}
-                        <button aria-label="Close" class="btn-close" data-bs-dismiss="alert" type="button"></button>
-                    </div>
-                {% endfor %}
-            </div>
-        {% endif %}
+    {% if messages %}
+    <div class="flash-messages-container">
+        {% for msg in messages %}
+        <div class="alert alert-{{ msg.category }} alert-dismissible fade show mt-3" role="alert">
+            {{ msg.message }}
+            <button aria-label="Close" class="btn-close" data-bs-dismiss="alert" type="button"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
     {% endwith %}
     {% block content %}{% endblock %}
 </main>
 
-<footer class="footer mt-auto py-3 bg-dark text-light border-top border-secondary-subtle">
-    <div class="container text-center">
-        <span class="text-muted">DOJ © {{ G.datetime_class.now().year if G is defined and G.datetime_class is defined else '____' }}</span>
-    </div>
-</footer>
+<!--<footer class="footer mt-auto py-3 bg-dark text-light border-top border-secondary-subtle">-->
+<!--    <div class="container text-center">-->
+<!--        <span class="text-muted">DOJ © {{ G.datetime_class.now().year if G is defined and G.datetime_class is defined else '____' }}</span>-->
+<!--    </div>-->
+<!--</footer>-->
 
 <script crossorigin="anonymous"
         integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
@@ -287,26 +423,26 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/display/fullscreen.min.js"></script>
 
 {% block extra_js %}
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const elements = document.querySelectorAll('.utc-to-local');
-            const options = {
-                year: 'numeric', month: '2-digit', day: '2-digit',
-                hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
-            };
-            elements.forEach(function (el) {
-                const utcDateString = el.getAttribute('data-datetime');
-                if (utcDateString) {
-                    try {
-                        const localDate = new Date(utcDateString);
-                        el.textContent = localDate.toLocaleString(undefined, options);
-                    } catch (e) {
-                        console.error("Could not parse date:", utcDateString);
-                    }
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const elements = document.querySelectorAll('.utc-to-local');
+        const options = {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
+        };
+        elements.forEach(function (el) {
+            const utcDateString = el.getAttribute('data-datetime');
+            if (utcDateString) {
+                try {
+                    const localDate = new Date(utcDateString);
+                    el.textContent = localDate.toLocaleString(undefined, options);
+                } catch (e) {
+                    console.error("Could not parse date:", utcDateString);
                 }
-            });
+            }
         });
-    </script>
+    });
+</script>
 {% endblock %}
 </body>
 </html>

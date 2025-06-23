@@ -20,9 +20,10 @@
                     <a class="btn btn-outline-secondary btn-lg px-4" href="{{ url_for('ui_my_submissions') }}">My
                         Submissions</a>
                 {% else %}
-                    <a class="btn btn-primary btn-lg px-4 gap-3" href="{{ url_for('ui_login_form') }}">Login</a>
-                    <a class="btn btn-outline-secondary btn-lg px-4"
-                       href="{{ url_for('ui_register_form') }}">Register</a>
+                    {% set next_url = request.query_params.get('next', '') %}
+                    <a class="btn btn-primary btn-lg px-4 gap-3" href="{{ url_for('ui_login_form') }}">
+                        <i class="bi bi-google"></i> Sign in with Google
+                    </a>
                 {% endif %}
             </div>
         </div>

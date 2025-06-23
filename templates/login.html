@@ -3,34 +3,23 @@
 {% block title %}Login - Online Judge{% endblock %}
 
 {% block content %}
-    <div class="row justify-content-center">
-        <div class="col-md-6 col-lg-5">
-            <div class="card shadow-sm">
-                <div class="card-body p-4">
-                    <h2 class="card-title text-center mb-4">Login</h2>
-                    <form action="{{ url_for('ui_handle_login') }}" method="post">
-                        <div class="form-floating mb-3">
-                            <input class="form-control" id="username" name="username" placeholder="name@example.com"
-                                   required type="email">
-                            <label for="username">Email address</label>
-                        </div>
-                        <div class="form-floating mb-3">
-                            <input class="form-control" id="password" name="password" placeholder="Password" required
-                                   type="password">
-                            <label for="password">Password</label>
-                        </div>
-                        <div class="d-grid">
-                            <button class="btn btn-primary btn-lg" type="submit">Login</button>
-                        </div>
-                    </form>
-                    <hr class="my-4">
-                    <div class="text-center">
-                        <p class="mb-0">Don't have an account? <a href="{{ url_for('ui_register_form') }}">Register
-                            here</a>
-                        </p>
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card shadow-sm">
+            <div class="card-body p-4 p-md-5">
+                <div class="text-center">
+                    <h2 class="card-title mb-4">Sign In</h2>
+                    <p class="text-muted mb-4">
+                        Please sign in with your Google account to continue to DOJ.
+                    </p>
+                    <div class="d-grid">
+                        <a class="btn btn-primary btn-lg" href="{{ url_for('google_login') }}?redirect=true&next={{ next_url }}">
+                            <i class="bi bi-google"></i> Sign in with Google
+                        </a>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+</div>
 {% endblock %}
