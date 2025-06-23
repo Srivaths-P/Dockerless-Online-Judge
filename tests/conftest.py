@@ -14,7 +14,6 @@ os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 from app.main import app
 from app.api.deps import get_db
 from app.db.base_class import Base
-from app.core.security import create_access_token
 from app.crud import crud_user
 from app.schemas.user import UserCreate
 from app.services import contest_service
@@ -106,12 +105,6 @@ def mock_contest_service_path(test_server_data_path, monkeypatch):
 
 @pytest.fixture(scope="function")
 def test_user(db_session: Session):
-    user_in = UserCreate(email="test@example.com", password="password")
+    user_in = UserCreate(email="test@example.com")
     user = crud_user.user.create(db_session, obj_in=user_in)
     return user
-
-
-@pytest.fixture(scope="function")
-def auth_token_headers(test_user):
-    access_token = create_access_token(data={"sub": test_user.email})
-    return {"Authorization": f"Bearer {access_token}"}

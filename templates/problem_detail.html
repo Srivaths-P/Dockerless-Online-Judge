@@ -98,11 +98,11 @@
 
                     <div class="mb-3">
                         <label class="form-label visually-hidden" for="codeTextarea">Code:</label>
-                        <textarea class="form-control" id="codeTextarea" name="code" required rows="18"></textarea>
+                        <textarea class="form-control" id="codeTextarea" name="code" required></textarea>
                     </div>
                     <div class="d-grid">
-                        <button class="btn btn-primary btn-lg" type="submit"><i class="bi bi-cloud-upload"></i> Submit
-                            Solution
+                        <button class="btn btn-primary btn-lg" id="submitBtn" type="button">
+                            <i class="bi bi-cloud-upload"></i> Submit Solution
                         </button>
                     </div>
                 </form>
@@ -130,6 +130,7 @@
             const languageSelect = document.getElementById('languageSelect');
             const submissionForm = document.getElementById('submissionForm');
             const clearBtn = document.getElementById('clearCodeBtn');
+            const submitBtn = document.getElementById('submitBtn');
 
             const storageKey = `doj-code-{{ contest_id }}-{{ problem.id }}`;
             const langStorageKey = `doj-lang-{{ contest_id }}-{{ problem.id }}`;
@@ -177,8 +178,11 @@
                         "F11": function (cm) { cm.setOption("fullScreen", !cm.getOption("fullScreen")); },
                         "Esc": function (cm) { if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false); },
                         "Tab": function(cm) {
-                            if (cm.somethingSelected()) { cm.indentSelection("add"); }
-                            else { cm.replaceSelection(cm.getOption("indentWithTabs") ? "\t" : Array(cm.getOption("indentUnit") + 1).join(" ")); }
+                            if (cm.somethingSelected()) {
+                                cm.indentSelection("add");
+                            } else {
+                                cm.replaceSelection(Array(cm.getOption("indentUnit") + 1).join(" "));
+                            }
                         },
                         "Shift-Tab": function(cm) { cm.indentSelection("subtract"); }
                     }
@@ -202,15 +206,16 @@
                     editor.setValue(localStorage.getItem(storageKey) || "");
                 });
 
-                if (submissionForm) {
-                    submissionForm.addEventListener('submit', function (event) {
+                if (submitBtn) {
+                    submitBtn.addEventListener('click', function () {
                         if (editor) {
-                            codeTextarea.value = editor.getValue();
+                            editor.save();
                         }
                         if (!codeTextarea.value.trim()) {
                             alert("Code cannot be empty.");
-                            event.preventDefault();
+                            return;
                         }
+                        submissionForm.submit();
                     });
                 }
             }
@@ -221,6 +226,8 @@
         <script>
             document.addEventListener('DOMContentLoaded', function () {
                 const generateButton = document.getElementById('generateTestcaseBtn');
+                if (!generateButton) return;
+
                 const generateButtonText = document.getElementById('generateButtonText');
                 const generateSpinner = document.getElementById('generateSpinner');
                 const generateLoadingText = document.getElementById('generateLoadingText');
@@ -229,57 +236,55 @@
                 const generatorOutputPre = document.getElementById('generatorOutput');
                 const generatorErrorDiv = document.getElementById('generatorError');
 
-                if (generateButton) {
-                    generateButton.addEventListener('click', async function () {
-                        generateButton.disabled = true;
-                        generateButtonText.classList.add('d-none');
-                        generateSpinner.classList.remove('d-none');
-                        generateLoadingText.classList.remove('d-none');
-                        generatorResultsDiv.classList.add('d-none');
-                        generatorErrorDiv.classList.add('d-none');
-                        generatorInputPre.textContent = '';
-                        generatorOutputPre.textContent = '';
+                generateButton.addEventListener('click', async function () {
+                    generateButton.disabled = true;
+                    generateButtonText.classList.add('d-none');
+                    generateSpinner.classList.remove('d-none');
+                    generateLoadingText.classList.remove('d-none');
+                    generatorResultsDiv.classList.add('d-none');
+                    generatorErrorDiv.classList.add('d-none');
+                    generatorInputPre.textContent = '';
+                    generatorOutputPre.textContent = '';
 
-                        const contestId = "{{ contest_id }}";
-                        const problemId = "{{ problem.id }}";
-                        const apiUrl = `/api/v1/contests/${contestId}/problems/${problemId}/generate_testcase`;
+                    const contestId = "{{ contest_id }}";
+                    const problemId = "{{ problem.id }}";
+                    const apiUrl = `/api/v1/contests/${contestId}/problems/${problemId}/generate_testcase`;
 
-                        try {
-                            const response = await fetch(apiUrl, {method: 'POST'});
-                            const result = await response.json();
-                            generatorResultsDiv.classList.remove('d-none');
+                    try {
+                        const response = await fetch(apiUrl, {method: 'POST'});
+                        const result = await response.json();
+                        generatorResultsDiv.classList.remove('d-none');
 
-                            if (response.ok) {
-                                if (result.error === null) {
-                                    generatorInputPre.textContent = result.input || 'No input generated.';
-                                    generatorOutputPre.textContent = result.output || 'No output generated.';
-                                } else {
-                                    generatorInputPre.textContent = 'Generation process failed.';
-                                    generatorOutputPre.textContent = 'Generation process failed.';
-                                    generatorErrorDiv.textContent = `Error: ${result.error || 'Sandbox error occurred.'}`;
-                                    generatorErrorDiv.classList.remove('d-none');
-                                }
+                        if (response.ok) {
+                            if (result.error === null) {
+                                generatorInputPre.textContent = result.input || 'No input generated.';
+                                generatorOutputPre.textContent = result.output || 'No output generated.';
                             } else {
-                                generatorInputPre.textContent = 'Generation failed.';
-                                generatorOutputPre.textContent = 'Generation failed.';
-                                const errorDetail = `Generator Error: ${result.detail || response.statusText}`;
-                                generatorErrorDiv.textContent = errorDetail;
+                                generatorInputPre.textContent = 'Generation process failed.';
+                                generatorOutputPre.textContent = 'Generation process failed.';
+                                generatorErrorDiv.textContent = `Error: ${result.error || 'Sandbox error occurred.'}`;
                                 generatorErrorDiv.classList.remove('d-none');
                             }
-                        } catch (error) {
-                            generatorResultsDiv.classList.remove('d-none');
+                        } else {
                             generatorInputPre.textContent = 'Generation failed.';
                             generatorOutputPre.textContent = 'Generation failed.';
-                            generatorErrorDiv.textContent = `Request failed: ${error}`;
+                            const errorDetail = `Generator Error: ${result.detail || response.statusText}`;
+                            generatorErrorDiv.textContent = errorDetail;
                             generatorErrorDiv.classList.remove('d-none');
-                        } finally {
-                            generateButton.disabled = false;
-                            generateButtonText.classList.remove('d-none');
-                            generateSpinner.classList.add('d-none');
-                            generateLoadingText.classList.add('d-none');
                         }
-                    });
-                }
+                    } catch (error) {
+                        generatorResultsDiv.classList.remove('d-none');
+                        generatorInputPre.textContent = 'Generation failed.';
+                        generatorOutputPre.textContent = 'Generation failed.';
+                        generatorErrorDiv.textContent = `Request failed: ${error}`;
+                        generatorErrorDiv.classList.remove('d-none');
+                    } finally {
+                        generateButton.disabled = false;
+                        generateButtonText.classList.remove('d-none');
+                        generateSpinner.classList.add('d-none');
+                        generateLoadingText.classList.add('d-none');
+                    }
+                });
             });
         </script>
     {% endif %}

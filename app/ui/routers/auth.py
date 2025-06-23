@@ -69,7 +69,7 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
 
         user = crud_user.user.get_by_email(db, email=user_email)
         if not user:
-            user_in = UserCreate(email=user_email, password="")
+            user_in = UserCreate(email=user_email)
             user = crud_user.user.create(db, obj_in=user_in)
             log_user_event(user.id, user.email, "user_register_google")
             flash(request, "Account created and logged in successfully!", "success")

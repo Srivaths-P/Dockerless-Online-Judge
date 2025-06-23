@@ -21,61 +21,52 @@
     </div>
 </div>
 
-<div class="row g-4 ide-row">
-    <div class="col-lg-8">
-        <div class="card shadow-sm ide-code-card">
-            <div class="card-body">
+<div class="ide-container">
+    <div class="ide-editor-pane">
+        <div class="card shadow-sm w-100">
+            <div class="card-body p-0">
                 <textarea id="codeTextarea" name="code"></textarea>
             </div>
         </div>
     </div>
 
-    <div class="col-lg-4">
-        <div class="ide-io-column h-100">
-            <div class="card shadow-sm ide-io-card input-card">
-                <div class="card-header"><h5 class="mb-0">Standard Input (stdin)</h5></div>
-                <div class="card-body">
-                    <textarea id="inputTextarea" class="form-control"
-                              placeholder="Enter your input here..."
-                              style="font-family: monospace;"></textarea>
-                </div>
+    <div class="ide-io-pane">
+        <div class="card shadow-sm ide-input-card">
+            <div class="card-header"><h5 class="mb-0">Input</h5></div>
+            <div class="card-body">
+                <textarea id="inputTextarea" class="form-control" placeholder="Enter input here..."></textarea>
             </div>
+        </div>
 
-            <div class="card shadow-sm ide-io-card output-card">
-                <div class="card-header"><h5 class="mb-0">Output</h5></div>
-                <div class="card-body" id="output-container">
-                    <div id="output-placeholder" class="text-center text-muted p-4 d-flex flex-column justify-content-center align-items-center h-100">
-                        <i class="bi bi-box fs-1"></i>
-                        <p class="mt-2">Output will appear here after running your code.</p>
+        <div class="card shadow-sm ide-output-card">
+            <div class="card-header"><h5 class="mb-0">Output</h5></div>
+            <div class="card-body p-0" id="output-container">
+                <div id="output-placeholder" class="text-center text-muted p-4 d-flex flex-column justify-content-center align-items-center h-100">
+                    <i class="bi bi-box fs-1"></i>
+                    <p class="mt-2">Output will appear here.</p>
+                </div>
+
+                <div id="results-display" class="d-none">
+                    <div class="pb-2 border-bottom mb-2">
+                        <div class="d-flex justify-content-between flex-wrap">
+                            <span class="me-3"><strong>Status:</strong> <span id="status-badge" class="badge status-badge"></span></span>
+                            <span class="me-3"><strong>Time:</strong> <span id="time-taken"></span> ms</span>
+                            <span><strong>Memory:</strong> <span id="memory-used"></span> KB</span>
+                        </div>
                     </div>
 
-                    <div id="results-display" class="d-none h-100" style="display: flex; flex-direction: column;">
-                        <div class="pb-3 border-bottom">
-                            <div class="row">
-                                <div class="col-6"><small><strong>Status:</strong></small></div>
-                                    <div class="col-6 text-end"><small><span id="status-badge" class="badge"></span></small></div>
-
-                                <div class="col-6"><small><strong>Time:</strong></small></div>
-                                <div class="col-6 text-end"><small><span id="time-taken"></span> ms</small></div>
-
-                                <div class="col-6"><small><strong>Memory:</strong></small></div>
-                                <div class="col-6 text-end"><small><span id="memory-used"></span> KB</small></div>
-                            </div>
+                    <div class="results-scroll-area">
+                        <div id="compile-error-section" class="d-none">
+                            <h6 class="text-warning mb-1">Compilation Error</h6>
+                            <pre class="small"><code id="compile-error-output"></code></pre>
                         </div>
-
-                        <div class="p-3 flex-grow-1" style="overflow-y: auto;">
-                            <div id="compile-error-section" class="d-none">
-                                <h6 class="text-warning mb-1">Compilation Error</h6>
-                                <pre class="bg-dark p-2 rounded small"><code id="compile-error-output"></code></pre>
-                            </div>
-                            <div id="stdout-section" class="d-none">
-                                <h6 class="mb-1">Standard Output (stdout)</h6>
-                                <pre class="bg-dark p-2 rounded small"><code id="stdout-output"></code></pre>
-                            </div>
-                            <div id="stderr-section" class="d-none">
-                                <h6 class="mb-1">Standard Error (stderr)</h6>
-                                <pre class="bg-dark p-2 rounded small"><code id="stderr-output"></code></pre>
-                            </div>
+                        <div id="stdout-section" class="d-none">
+                            <h6 class="mb-1">Standard Output</h6>
+                            <pre class="small"><code id="stdout-output"></code></pre>
+                        </div>
+                        <div id="stderr-section" class="d-none">
+                             <h6 class="text-danger mb-1">Standard Error</h6>
+                            <pre class="small"><code id="stderr-output"></code></pre>
                         </div>
                     </div>
                 </div>
@@ -89,14 +80,19 @@
 {% block extra_js %}
 {{ super() }}
 <script>
-    let editor;
     document.addEventListener('DOMContentLoaded', function () {
         const codeTextarea = document.getElementById('codeTextarea');
+        if (!codeTextarea) return;
+
+        let editor;
         const languageSelect = document.getElementById('languageSelect');
         const inputTextarea = document.getElementById('inputTextarea');
+        const runBtn = document.getElementById('runBtn');
+
         const codeStorageKey = 'doj-ide-code';
         const langStorageKey = 'doj-ide-lang';
         const inputStorageKey = 'doj-ide-input';
+
         function saveState() {
             if (editor) {
                 localStorage.setItem(codeStorageKey, editor.getValue());
@@ -104,6 +100,7 @@
                 localStorage.setItem(inputStorageKey, inputTextarea.value);
             }
         }
+
         function loadState() {
             const savedCode = localStorage.getItem(codeStorageKey);
             const savedLang = localStorage.getItem(langStorageKey);
@@ -112,16 +109,31 @@
             if (savedCode) { codeTextarea.value = savedCode; }
             if (savedInput) { inputTextarea.value = savedInput; }
         }
+
         function getCodeMirrorMode(lang) {
             const option = languageSelect.querySelector(`option[value="${lang}"]`);
             return option ? option.dataset.codemirrorMode : 'clike';
         }
+
         function initializeEditor(mode) {
             if (editor) editor.toTextArea();
             editor = CodeMirror.fromTextArea(codeTextarea, {
                 lineNumbers: true, mode: mode, theme: "material-darker",
                 matchBrackets: true, autoCloseBrackets: true, styleActiveLine: true,
                 indentUnit: 4, smartIndent: true, tabSize: 4, indentWithTabs: false,
+
+                extraKeys: {
+                    "Tab": function(cm) {
+                        if (cm.somethingSelected()) {
+                            cm.indentSelection("add");
+                        } else {
+                            cm.replaceSelection(Array(cm.getOption("indentUnit") + 1).join(" "));
+                        }
+                    },
+                    "Shift-Tab": function(cm) {
+                        cm.indentSelection("subtract");
+                    }
+                }
             });
             let timeout;
             editor.on('change', () => {
@@ -130,18 +142,19 @@
             });
             editor.on('blur', saveState);
         }
-        if (codeTextarea && languageSelect) {
-            loadState();
-            initializeEditor(getCodeMirrorMode(languageSelect.value));
-            languageSelect.addEventListener('change', function() {
-                const selectedMode = getCodeMirrorMode(this.value);
-                initializeEditor(selectedMode);
-                editor.setValue(localStorage.getItem(codeStorageKey) || "");
-                saveState();
-            });
-            inputTextarea.addEventListener('input', saveState);
-        }
-        const runBtn = document.getElementById('runBtn');
+
+        loadState();
+        initializeEditor(getCodeMirrorMode(languageSelect.value));
+
+        languageSelect.addEventListener('change', function() {
+            const selectedMode = getCodeMirrorMode(this.value);
+            initializeEditor(selectedMode);
+            editor.setValue(localStorage.getItem(codeStorageKey) || "");
+            saveState();
+        });
+
+        inputTextarea.addEventListener('input', saveState);
+
         runBtn.addEventListener('click', async function () {
             const runBtnText = document.getElementById('runBtnText');
             const runSpinner = document.getElementById('runSpinner');
@@ -157,42 +170,54 @@
             const stdoutOutput = document.getElementById('stdout-output');
             const stderrSection = document.getElementById('stderr-section');
             const stderrOutput = document.getElementById('stderr-output');
+
             runBtn.disabled = true;
             runBtnText.style.display = 'none';
             runSpinner.classList.remove('d-none');
             runLoadingText.classList.remove('d-none');
             outputPlaceholder.classList.add('d-none');
             resultsDisplay.classList.add('d-none');
+
             const payload = {
                 code: editor.getValue(),
                 language: languageSelect.value,
                 input_str: inputTextarea.value
             };
+
             try {
                 const response = await fetch('/api/v1/ide/run', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload),
-                    credentials: 'include'
+                    body: JSON.stringify(payload)
                 });
                 const result = await response.json();
                 resultsDisplay.classList.remove('d-none');
                 compileErrorSection.classList.add('d-none');
                 stdoutSection.classList.add('d-none');
                 stderrSection.classList.add('d-none');
+
                 if (!response.ok) {
                     statusBadge.textContent = `Error: ${response.status}`;
-                    statusBadge.className = 'badge bg-danger';
+                    statusBadge.className = 'badge status-badge status-RUNTIME_ERROR';
                     stdoutOutput.textContent = result.detail || 'An unknown server error occurred.';
                     stdoutSection.classList.remove('d-none');
                     timeTaken.textContent = 'N/A';
                     memoryUsed.textContent = 'N/A';
                     return;
                 }
-                statusBadge.textContent = result.status.replace(/_/g, ' ').toUpperCase();
-                statusBadge.className = 'badge rounded-pill status-' + result.status.toUpperCase();
+
+                let statusKey = result.status.toUpperCase();
+                if (statusKey === 'SUCCESS' && result.exit_code !== 0) {
+                    statusKey = 'RUNTIME_ERROR';
+                }
+
+                const statusText = statusKey.replace(/_/g, ' ');
+                statusBadge.textContent = statusText;
+                statusBadge.className = 'badge status-badge status-' + statusKey;
+
                 timeTaken.textContent = result.execution_time_ms.toFixed(2);
                 memoryUsed.textContent = result.memory_used_kb;
+
                 if (result.compilation_stderr) {
                     compileErrorOutput.textContent = result.compilation_stderr;
                     compileErrorSection.classList.remove('d-none');
@@ -208,7 +233,7 @@
             } catch (error) {
                 resultsDisplay.classList.remove('d-none');
                 statusBadge.textContent = 'Client Error';
-                statusBadge.className = 'badge bg-danger';
+                statusBadge.className = 'badge status-badge status-INTERNAL_ERROR';
                 stdoutOutput.textContent = 'Could not connect to the server. ' + error;
                 stdoutSection.classList.remove('d-none');
             } finally {

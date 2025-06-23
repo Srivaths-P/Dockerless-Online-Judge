@@ -37,13 +37,12 @@
                         <td><span class="badge bg-secondary">{{ sub.language|title if sub.language else 'N/A' }}</span>
                         </td>
                         <td>
-                            {# Use the status- class directly on the badge #}
-                            <span class="badge rounded-pill status-{{ sub.status.value }} px-2 py-1">{{ sub.status.value|replace("_", " ")|title }}</span>
+                            <span class="badge rounded-pill status-badge status-{{ sub.status.value }}">{{ sub.status.value|replace("_", " ")|title }}</span>
                         </td>
                         <td>
-                            <abbr title="{{ sub.submitted_at.isoformat() if sub.submitted_at else 'N/A' }}">
+                            <span class="utc-to-local" data-datetime="{{ sub.submitted_at.isoformat() if sub.submitted_at else '' }}">
                                 <small>{{ sub.submitted_at.strftime('%Y-%m-%d %H:%M') if sub.submitted_at else 'N/A' }}</small>
-                            </abbr>
+                            </span>
                         </td>
                         <td>
                             <a class="btn btn-sm btn-outline-primary"

@@ -25,6 +25,9 @@
         <div class="card-body">
             <div class="row">
                 <div class="col-md-6">
+                    <p class="mb-2"><strong>Status:</strong>
+                        <span class="badge rounded-pill fs-6 status-badge status-{{ submission.status.value }}">{{ submission.status.value|replace("_", " ")|title }}</span>
+                    </p>
                     <p class="mb-2"><strong>Problem:</strong>
                         <a href="{{ url_for('ui_problem_detail', contest_id=submission.contest_id, problem_id=submission.problem_id) }}">
                             {{ submission.problem_id }}
@@ -32,30 +35,18 @@
                         (in
                         <a href="{{ url_for('ui_contest_detail', contest_id=submission.contest_id) }}">{{ submission.contest_id }}</a>)
                     </p>
+                </div>
+                <div class="col-md-6 d-flex flex-column align-items-end">
+                    <p class="mb-0"><strong>Submission Time:</strong>
+                        <span class="utc-to-local" data-datetime="{{ submission.submitted_at.isoformat() if submission.submitted_at else '' }}">
+                            {{ submission.submitted_at.strftime('%Y-%m-%d %H:%M:%S %Z') if submission.submitted_at else 'N/A' }}
+                        </span>
+                    </p>
                     <p class="mb-0"><strong>Language:</strong> <span
                             class="badge bg-secondary">{{ submission.language|title if submission.language else 'N/A' }}</span>
                     </p>
                 </div>
-                <div class="col-md-6">
-                    <p class="mb-2"><strong>Status:</strong> <span
-                            class="badge rounded-pill status-{{ submission.status.value }} px-2 py-1 fs-6">{{ submission.status.value|replace("_", " ")|title }}</span>
-                    </p>
-                    <p class="mb-0"><strong>Submitted At:</strong>
-                        <abbr title="{{ submission.submitted_at.isoformat() if submission.submitted_at else 'N/A' }}">
-                            {{ submission.submitted_at.strftime('%Y-%m-%d %H:%M:%S %Z') if submission.submitted_at else
-                        'N/A' }}
-                        </abbr>
-                    </p>
-                </div>
             </div>
-            {% if submission.status.value not in ['ACCEPTED', 'PENDING', 'RUNNING'] %}
-                <div class="mt-3 pt-3 border-top text-center">
-                    <a class="btn btn-warning"
-                       href="{{ url_for('ui_problem_detail', contest_id=submission.contest_id, problem_id=submission.problem_id) }}">
-                        <i class="bi bi-arrow-clockwise"></i> Try Problem Again
-                    </a>
-                </div>
-            {% endif %}
         </div>
     </div>
 
@@ -63,24 +54,22 @@
         <div class="card-header">
             Submitted Code
         </div>
-        <div class="card-body codemirror-static-container">
-            <textarea id="submittedCodeViewer" class="submitted-code-viewer-area"
-                      readonly>{{ submission.code }}</textarea>
+        <div class="card-body p-0">
+            <textarea id="submittedCodeViewer" readonly>{{ submission.code }}</textarea>
         </div>
     </div>
 
 
     <h3 class="mt-4 mb-3">Test Case Results</h3>
-        {% if submission.status.value == 'COMPILATION_ERROR' %}
+    {% if submission.status.value == 'COMPILATION_ERROR' %}
         <div class="alert alert-danger d-flex align-items-center" role="alert">
             <div>
                 <h4 class="alert-heading mb-1"><i class="bi bi-x-octagon-fill me-2 fs-4"></i>Compilation Failed!</h4>
-                {# The stderr is in the first (and only) result object #}
                 {% if submission.results and submission.results[0].stderr %}
                     <br>
                     <pre class="m-0"><code class="language-clike">{{ submission.results[0].stderr }}</code></pre>
                 {% else %}
-                    <p class="mb-0">No specific compiler output available. Please check your code for syntax errors.</p>
+                    <p class="mb-0">No compiler output available.</p>
                 {% endif %}
             </div>
         </div>
@@ -95,33 +84,20 @@
 
     {% elif submission.results %}
         {% for result in submission.results %}
-            <div class="card test-case-result status-{{ result.status.value }} mb-3 shadow-sm">
+            <div class="card test-case-card test-case-card-{{ result.status.value }} mb-3 shadow-sm">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">Test Case: {{ result.test_case_name }}</h5>
-                    <span class="badge rounded-pill status-{{ result.status.value }} px-2 py-1">{{ result.status.value|replace("_", " ")|title }}</span>
+                    <span class="badge rounded-pill status-badge status-{{ result.status.value }}">{{ result.status.value|replace("_", " ")|title }}</span>
                 </div>
                 <div class="card-body">
-                    <p class="mb-1"><small><strong>Time:</strong> {{ "%.2f"|format(result.execution_time_ms) }} ms</small></p>
-                    <p class="mb-1"><small><strong>Memory:</strong> {{ result.memory_used_kb }} KB</small></p>
-
-                    <!-- {% if result.stderr %}-->
-                    <!--     <hr>-->
-                    <!--     <p class="mb-1"><small><strong>Standard Error:</strong></small></p>-->
-                    <!--     <pre class="m-0"><code class="language-clike">{{ result.stderr }}</code></pre>-->
-                    <!-- {% endif %}-->
-
-                    <!-- {% if result.stdout and result.status.value == 'WRONG_ANSWER' %}-->
-                    <!--      <hr>-->
-                    <!--     <p class="mb-1"><small><strong>Your Output (first 4096 bytes):</strong></small></p>-->
-                    <!--     <pre class="m-0"><code class="language-clike">{{ result.stdout }}</code></pre>-->
-                    <!-- {% endif %}-->
+                    <p class="mb-1"><small><strong>Time:</strong> {{ "%.2f"|format(result.execution_time_ms) if result.execution_time_ms is not none else 'N/A' }} ms</small></p>
+                    <p class="mb-1"><small><strong>Memory:</strong> {{ result.memory_used_kb if result.memory_used_kb is not none else 'N/A' }} KB</small></p>
                 </div>
             </div>
         {% endfor %}
     {% else %}
         <div class="alert alert-secondary" role="alert">
-            No detailed test case results available for this submission
-            (Status: {{ submission.status.value|replace("_", " ")|title }}).
+            No detailed test case results available for this submission.
         </div>
     {% endif %}
 
@@ -136,38 +112,30 @@
 
     {% if submission.status.value == 'PENDING' or submission.status.value == 'RUNNING' %}
         <script>
-            setTimeout(function () {
-                window.location.reload();
-            }, 5000);
+            setTimeout(() => window.location.reload(), 5000);
         </script>
     {% endif %}
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const codeViewerTextarea = document.getElementById('submittedCodeViewer');
-            if (codeViewerTextarea) {
-                const language = "{{ submission.language.lower() }}";
-                let mode = 'clike';
+            if (!codeViewerTextarea) return;
 
-                if (language === 'python') {
-                    mode = 'python';
-                } else if (language === 'c++') {
-                    mode = 'text/x-c++src';
-                } else if (language === 'c') {
-                    mode = 'text/x-csrc';
-                }
+            const language = "{{ submission.language.lower() }}";
+            let mode = 'clike';
+            if (language === 'python') mode = 'python';
+            else if (language === 'c++') mode = 'text/x-c++src';
+            else if (language === 'c') mode = 'text/x-csrc';
 
-                CodeMirror.fromTextArea(codeViewerTextarea, {
-                    value: codeViewerTextarea.value,
-                    mode: mode,
-                    theme: "material-darker",
-                    lineNumbers: true,
-                    readOnly: true,
-                    lineWrapping: true,
-                    height: "auto",
-                    viewportMargin: Infinity,
-                });
-            }
+            CodeMirror.fromTextArea(codeViewerTextarea, {
+                value: codeViewerTextarea.value,
+                mode: mode,
+                theme: "material-darker",
+                lineNumbers: true,
+                readOnly: true,
+                lineWrapping: true,
+                viewportMargin: Infinity,
+            });
 
             if (typeof Prism !== 'undefined') {
                 Prism.highlightAll();
