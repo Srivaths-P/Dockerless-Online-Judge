@@ -95,6 +95,8 @@ async def _judge_test_case(
                 ]
             )
 
+            print(f"{validator_result.status} {validator_result.exit_code} {validator_result.stdout} {validator_result.stderr}")
+
             if validator_result.status != 'success' or validator_result.exit_code is None:
                 return TestCaseResult(
                     test_case_name=test_case.name, status=SubmissionStatus.INTERNAL_ERROR,

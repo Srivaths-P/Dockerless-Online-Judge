@@ -141,10 +141,8 @@ async def run_sandboxed(
                 status = 'timeout'
             else:
                 status = 'runtime_error'
-        elif exit_code == 0:
-            status = 'success'
         else:
-            status = 'runtime_error'
+            status = 'success'
 
         sysd = eres.get("systemd_result")
         if sysd == "oom-kill":
