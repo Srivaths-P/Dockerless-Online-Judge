@@ -144,8 +144,8 @@
 
                     const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 
-                    const offsetMinutes = date.getTimezoneOffset();
-                    const offsetSign = offsetMinutes > 0 ? "-" : "+";
+                    const offsetMinutes = -date.getTimezoneOffset();
+                    const offsetSign = offsetMinutes > 0 ? "+" : "-";
                     const offsetHours = pad(Math.abs(Math.floor(offsetMinutes / 60)));
                     const offsetMins = pad(Math.abs(offsetMinutes % 60));
                     const offsetString = `(UTC${offsetSign}${offsetHours}:${offsetMins})`;
