@@ -1,6 +1,6 @@
 fastapi[standard]~=0.115.12
 uvicorn[standard]
-gunicorn[standard]
+gunicorn
 pydantic~=2.11.4
 python-jose[cryptography]~=3.4.0
 passlib[bcrypt]~=1.7.4
