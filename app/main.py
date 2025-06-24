@@ -10,6 +10,7 @@ from starlette import status
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import RedirectResponse
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.core.templating import templates
 from app.api.v1.api import api_router as api_v1_router
@@ -68,6 +69,8 @@ app = FastAPI(
     title="DOJ",
     lifespan=lifespan
 )
+
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.abspath(os.path.join(_BASE_DIR, ".."))
