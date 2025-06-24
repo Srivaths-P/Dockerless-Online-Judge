@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import markdown
 from fastapi.templating import Jinja2Templates
@@ -15,6 +15,17 @@ if not os.path.exists(TEMPLATES_DIR):
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 templates.env.globals["get_flashed_messages"] = get_flashed_messages
 templates.env.globals["G"] = {"datetime_class": datetime, "timedelta_class": timedelta}
+
+
+def safe_isoformat(dt: datetime) -> str:
+    if not dt:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
+
+templates.env.filters["safe_isoformat"] = safe_isoformat
 
 
 def markdown_filter(text):

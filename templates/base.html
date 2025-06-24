@@ -126,18 +126,36 @@
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const elements = document.querySelectorAll('.utc-to-local');
-        const options = {
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
-        };
+        const pad = (num) => String(num).padStart(2, '0');
+
         elements.forEach(function (el) {
             const utcDateString = el.getAttribute('data-datetime');
             if (utcDateString) {
                 try {
-                    const localDate = new Date(utcDateString);
-                    el.textContent = localDate.toLocaleString(undefined, options);
+                    const date = new Date(utcDateString);
+                    if (isNaN(date)) throw new Error("Invalid Date");
+
+                    const year = date.getFullYear();
+                    const month = pad(date.getMonth() + 1);
+                    const day = pad(date.getDate());
+                    const hours = pad(date.getHours());
+                    const minutes = pad(date.getMinutes());
+                    const seconds = pad(date.getSeconds());
+
+                    const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+
+                    const offsetMinutes = date.getTimezoneOffset();
+                    const offsetSign = offsetMinutes > 0 ? "-" : "+";
+                    const offsetHours = pad(Math.abs(Math.floor(offsetMinutes / 60)));
+                    const offsetMins = pad(Math.abs(offsetMinutes % 60));
+                    const offsetString = `(UTC${offsetSign}${offsetHours}:${offsetMins})`;
+
+                    el.textContent = `${formattedDate} ${offsetString}`;
+                    el.setAttribute('title', `Server Time: ${utcDateString.replace('T', ' ').split('+')[0]} UTC`);
+
                 } catch (e) {
-                    console.error("Could not parse date:", utcDateString);
+                    console.error("Could not parse date:", utcDateString, e);
+                    el.textContent = utcDateString;
                 }
             }
         });

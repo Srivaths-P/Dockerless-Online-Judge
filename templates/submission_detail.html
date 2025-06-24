@@ -37,8 +37,8 @@
                     </p>
                 </div>
                 <div class="col-md-6 d-flex flex-column align-items-end">
-                    <p class="mb-0"><strong>Submission Time:</strong>
-                        <span class="utc-to-local" data-datetime="{{ submission.submitted_at.isoformat() if submission.submitted_at else '' }}">
+                    <p class="mb-0"><strong>Submitted At:</strong>
+                        <span class="utc-to-local" data-datetime="{{ submission.submitted_at | safe_isoformat }}">
                             {{ submission.submitted_at.strftime('%Y-%m-%d %H:%M:%S %Z') if submission.submitted_at else 'N/A' }}
                         </span>
                     </p>

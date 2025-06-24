@@ -40,7 +40,7 @@
                             <span class="badge rounded-pill status-badge status-{{ sub.status.value }}">{{ sub.status.value|replace("_", " ")|title }}</span>
                         </td>
                         <td>
-                            <span class="utc-to-local" data-datetime="{{ sub.submitted_at.isoformat() if sub.submitted_at else '' }}">
+                            <span class="utc-to-local" data-datetime="{{ sub.submitted_at | safe_isoformat }}">
                                 <small>{{ sub.submitted_at.strftime('%Y-%m-%d %H:%M') if sub.submitted_at else 'N/A' }}</small>
                             </span>
                         </td>
