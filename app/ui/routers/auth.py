@@ -68,6 +68,9 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
                 return RedirectResponse(url=str(request.url_for("ui_home")), status_code=HTTP_303_SEE_OTHER)
 
         user = crud_user.user.get_by_email(db, email=user_email)
+        if "_messages" in request.session:
+            request.session.pop("_messages")
+
         if not user:
             user_in = UserCreate(email=user_email)
             user = crud_user.user.create(db, obj_in=user_in)

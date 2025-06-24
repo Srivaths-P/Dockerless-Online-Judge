@@ -1,6 +1,7 @@
 import asyncio
 import os
 import shutil
+import signal
 import tempfile
 import traceback
 import uuid
@@ -69,8 +70,11 @@ async def run_sandboxed(
                             "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
                             "--unshare-pid", "--unshare-net",
                             PYTHON3, "/sandbox/wrapper.py"] + cfg["compile"]
+
+            compile_env = os.environ.copy()
+            compile_env['CPU_LIMIT_S'] = '30'
             cres = await asyncio.get_running_loop().run_in_executor(
-                blocking_executor, _systemd_bwrap_run, unit_c, 30, 512, bwrap_args_c
+                blocking_executor, _systemd_bwrap_run, unit_c, 30, 512, bwrap_args_c, compile_env
             )
             compile_exit_code = -1
             try:
@@ -85,7 +89,7 @@ async def run_sandboxed(
                     with open(err_f, 'r', errors='ignore') as f:
                         compilation_stderr = f.read(4096).strip()
                 if cres.get("systemd_result") == "timeout":
-                    compilation_stderr = "Compilation Timed Out.\n" + (compilation_stderr or "")
+                    compilation_stderr = "Compilation Timed Out (Wall Clock).\n" + (compilation_stderr or "")
                 elif cres.get("systemd_result") == "oom-kill":
                     compilation_stderr = "Compilation Memory Limit Exceeded.\n" + (compilation_stderr or "")
                 return SandboxResult(status='compilation_error',
@@ -113,30 +117,43 @@ async def run_sandboxed(
         final_command = command_to_wrap + (cmd_args or [])
         bwrap_args_e.extend([PYTHON3, "/sandbox/wrapper.py"] + final_command)
 
+        exec_env = os.environ.copy()
+        exec_env['CPU_LIMIT_S'] = str(time_limit_sec)
         eres = await asyncio.get_running_loop().run_in_executor(
             blocking_executor, _systemd_bwrap_run, unit_e,
-            time_limit_sec, memory_limit_mb, bwrap_args_e
+            time_limit_sec, memory_limit_mb, bwrap_args_e, exec_env
         )
 
-        exec_ms, mem_kb, exit_code = 0.0, 0, -1
+        exec_ms, mem_kb, exit_code, signal_num = 0.0, 0, -1, 0
         try:
             with open(res_log_f, 'r') as f:
                 for line in f:
                     if line.startswith("EXIT_CODE:"): exit_code = int(line.strip().split(':')[1])
-                    if line.startswith("WALL_S:"): exec_ms = round(float(line.strip().split(':')[1]) * 1000, 2)
+                    if line.startswith("SIGNAL:"): signal_num = int(line.strip().split(':')[1])
+                    if line.startswith("CPU_S:"): exec_ms = round(float(line.strip().split(':')[1]) * 1000, 2)
                     if line.startswith("MEM_KB:"): mem_kb = int(line.strip().split(':')[1])
         except (IOError, IndexError, ValueError):
             pass
 
-        sysd = eres.get("systemd_result")
         status = 'internal_error'
-        if sysd == "timeout":
-            status = 'timeout'
-            exec_ms = float(time_limit_sec * 1000)
-        elif sysd == "oom-kill":
-            status = 'oom-kill'
-        elif sysd == "success":
+        if signal_num != 0:
+            if signal_num == signal.SIGXCPU or signal_num == signal.SIGKILL:
+                status = 'timeout'
+            else:
+                status = 'runtime_error'
+        elif exit_code == 0:
             status = 'success'
+        else:
+            status = 'runtime_error'
+
+        sysd = eres.get("systemd_result")
+        if sysd == "oom-kill":
+            status = 'oom-kill'
+        elif sysd == "timeout":
+            status = 'timeout'
+
+        if status == 'timeout':
+            exec_ms = float(time_limit_sec * 1000)
 
         stdout_content, stderr_content = None, None
         if os.path.exists(out_f):

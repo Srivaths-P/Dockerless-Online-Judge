@@ -19,6 +19,7 @@ class User(Base):
 
     last_submission_at = Column(DateTime(timezone=True), nullable=True)
     last_generation_at = Column(DateTime(timezone=True), nullable=True)
+    last_ide_run_at = Column(DateTime(timezone=True), nullable=True)
 
     submissions = relationship("Submission", back_populates="submitter")
 
