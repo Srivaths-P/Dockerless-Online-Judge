@@ -1,4 +1,5 @@
-from uvicorn.workers import UvicornWorker
+import os
+from uvicorn_worker import UvicornWorker
 
 
 class MyUvicornWorker(UvicornWorker):
@@ -11,6 +12,12 @@ bind = "unix:doj.sock"
 umask = 0o007
 workers = 4
 worker_class = "gunicorn.conf.MyUvicornWorker"
+
+
+def when_ready(server):
+    pid = os.getpid()
+    os.environ['GUNICORN_PID'] = str(pid)
+    server.log.info(f"Gunicorn master process (PID: {pid}) is ready. Setting GUNICORN_PID.")
 
 
 def post_worker_init(worker):
