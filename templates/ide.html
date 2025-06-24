@@ -84,7 +84,6 @@
         const codeTextarea = document.getElementById('codeTextarea');
         if (!codeTextarea) return;
 
-        let editor;
         const languageSelect = document.getElementById('languageSelect');
         const inputTextarea = document.getElementById('inputTextarea');
         const runBtn = document.getElementById('runBtn');
@@ -92,6 +91,8 @@
         const codeStorageKey = 'doj-ide-code';
         const langStorageKey = 'doj-ide-lang';
         const inputStorageKey = 'doj-ide-input';
+
+        let editor;
 
         function saveState() {
             if (editor) {
@@ -102,54 +103,32 @@
         }
 
         function loadState() {
-            const savedCode = localStorage.getItem(codeStorageKey);
+            const savedCode = localStorage.getItem(codeStorageKey) || '';
             const savedLang = localStorage.getItem(langStorageKey);
-            const savedInput = localStorage.getItem(inputStorageKey);
+            const savedInput = localStorage.getItem(inputStorageKey) || '';
+
             if (savedLang) { languageSelect.value = savedLang; }
-            if (savedCode) { codeTextarea.value = savedCode; }
-            if (savedInput) { inputTextarea.value = savedInput; }
-        }
+            inputTextarea.value = savedInput;
+            const mode = languageSelect.options[languageSelect.selectedIndex].dataset.codemirrorMode;
 
-        function getCodeMirrorMode(lang) {
-            const option = languageSelect.querySelector(`option[value="${lang}"]`);
-            return option ? option.dataset.codemirrorMode : 'clike';
-        }
-
-        function initializeEditor(mode) {
-            if (editor) editor.toTextArea();
-            editor = CodeMirror.fromTextArea(codeTextarea, {
-                lineNumbers: true, mode: mode, theme: "material-darker",
-                matchBrackets: true, autoCloseBrackets: true, styleActiveLine: true,
-                indentUnit: 4, smartIndent: true, tabSize: 4, indentWithTabs: false,
-
-                extraKeys: {
-                    "Tab": function(cm) {
-                        if (cm.somethingSelected()) {
-                            cm.indentSelection("add");
-                        } else {
-                            cm.replaceSelection(Array(cm.getOption("indentUnit") + 1).join(" "));
-                        }
-                    },
-                    "Shift-Tab": function(cm) {
-                        cm.indentSelection("subtract");
-                    }
-                }
-            });
-            let timeout;
-            editor.on('change', () => {
-                clearTimeout(timeout);
-                timeout = setTimeout(saveState, 300);
-            });
-            editor.on('blur', saveState);
+            editor = initializeCodeMirror('codeTextarea', { mode: mode });
+            editor.setValue(savedCode);
         }
 
         loadState();
-        initializeEditor(getCodeMirrorMode(languageSelect.value));
+
+        let changeTimeout;
+        editor.on('change', () => {
+            clearTimeout(changeTimeout);
+            changeTimeout = setTimeout(saveState, 300);
+        });
+        editor.on('blur', saveState);
 
         languageSelect.addEventListener('change', function() {
-            const selectedMode = getCodeMirrorMode(this.value);
-            initializeEditor(selectedMode);
-            editor.setValue(localStorage.getItem(codeStorageKey) || "");
+            const selectedMode = this.options[this.selectedIndex].dataset.codemirrorMode;
+            if (editor) {
+                editor.setOption("mode", selectedMode);
+            }
             saveState();
         });
 

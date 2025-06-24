@@ -123,10 +123,10 @@
 
     {% if problem %}
     <script>
-        let editor;
-
         document.addEventListener('DOMContentLoaded', function () {
             const codeTextarea = document.getElementById('codeTextarea');
+            if (!codeTextarea) return;
+
             const languageSelect = document.getElementById('languageSelect');
             const submissionForm = document.getElementById('submissionForm');
             const clearBtn = document.getElementById('clearCodeBtn');
@@ -134,6 +134,8 @@
 
             const storageKey = `doj-code-{{ contest_id }}-{{ problem.id }}`;
             const langStorageKey = `doj-lang-{{ contest_id }}-{{ problem.id }}`;
+
+            let editor;
 
             function saveCode() {
                 if (editor) {
@@ -143,82 +145,53 @@
             }
 
             function loadCode() {
-                const savedCode = localStorage.getItem(storageKey);
+                const savedCode = localStorage.getItem(storageKey) || '';
                 const savedLang = localStorage.getItem(langStorageKey);
 
-                if (savedLang) {
-                    languageSelect.value = savedLang;
-                }
-                if (savedCode) {
-                    codeTextarea.value = savedCode;
-                }
+                if (savedLang) { languageSelect.value = savedLang; }
+
+                const mode = languageSelect.options[languageSelect.selectedIndex].dataset.codemirrorMode;
+                const customKeys = {
+                    "F11": (cm) => cm.setOption("fullScreen", !cm.getOption("fullScreen")),
+                    "Esc": (cm) => { if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false); }
+                };
+
+                editor = initializeCodeMirror('codeTextarea', { mode: mode, extraKeys: customKeys });
+                editor.setValue(savedCode);
             }
 
-            clearBtn.addEventListener('click', function() {
-                if (editor) {
-                    editor.setValue("");
-                    editor.focus();
+            loadCode();
+
+            let changeTimeout;
+            editor.on('change', () => {
+                clearTimeout(changeTimeout);
+                changeTimeout = setTimeout(saveCode, 300);
+            });
+            editor.on('blur', saveCode);
+
+            languageSelect.addEventListener('change', function () {
+                const selectedMode = this.options[this.selectedIndex].dataset.codemirrorMode;
+                if(editor) {
+                   editor.setOption("mode", selectedMode);
                 }
+                saveCode();
             });
 
-            function getCodeMirrorMode(selectedLanguageValue) {
-                const selectedOption = Array.from(languageSelect.options).find(opt => opt.value === selectedLanguageValue);
-                return selectedOption ? selectedOption.dataset.codemirrorMode : 'clike';
-            }
+            clearBtn.addEventListener('click', () => {
+                if (editor) editor.setValue('');
+            });
 
-            function initializeEditor(mode) {
-                if (editor) {
-                    editor.toTextArea();
+            submitBtn.addEventListener('click', function() {
+                submissionForm.requestSubmit();
+            });
+
+            submissionForm.addEventListener('submit', function (event) {
+                if (editor) editor.save();
+                if (!codeTextarea.value.trim()) {
+                    alert("Code cannot be empty.");
+                    event.preventDefault();
                 }
-                editor = CodeMirror.fromTextArea(codeTextarea, {
-                    lineNumbers: true, mode: mode, theme: "material-darker",
-                    matchBrackets: true, autoCloseBrackets: true, styleActiveLine: true,
-                    indentUnit: 4, smartIndent: true, tabSize: 4, indentWithTabs: false,
-                    extraKeys: {
-                        "F11": function (cm) { cm.setOption("fullScreen", !cm.getOption("fullScreen")); },
-                        "Esc": function (cm) { if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false); },
-                        "Tab": function(cm) {
-                            if (cm.somethingSelected()) {
-                                cm.indentSelection("add");
-                            } else {
-                                cm.replaceSelection(Array(cm.getOption("indentUnit") + 1).join(" "));
-                            }
-                        },
-                        "Shift-Tab": function(cm) { cm.indentSelection("subtract"); }
-                    }
-                });
-
-                let timeout;
-                editor.on('change', function () {
-                    clearTimeout(timeout);
-                    timeout = setTimeout(saveCode, 300);
-                });
-                editor.on('blur', saveCode);
-            }
-
-            if (codeTextarea && languageSelect) {
-                loadCode();
-                initializeEditor(getCodeMirrorMode(languageSelect.value));
-
-                languageSelect.addEventListener('change', function () {
-                    const selectedMode = getCodeMirrorMode(this.value);
-                    initializeEditor(selectedMode);
-                    editor.setValue(localStorage.getItem(storageKey) || "");
-                });
-
-                if (submitBtn) {
-                    submitBtn.addEventListener('click', function () {
-                        if (editor) {
-                            editor.save();
-                        }
-                        if (!codeTextarea.value.trim()) {
-                            alert("Code cannot be empty.");
-                            return;
-                        }
-                        submissionForm.submit();
-                    });
-                }
-            }
+            });
         });
     </script>
 
