@@ -55,6 +55,15 @@ pre {
     font-weight: 500;
 }
 
+.badge.status-badge-small {
+    font-size: 0.8rem;
+    min-width: 5em;
+    text-align: center;
+    padding: 0.3em 0.5em;
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
 .status-ACCEPTED, .status-SUCCESS { background-color: #28a745; }
 .status-WRONG_ANSWER, .status-TIME_LIMIT_EXCEEDED, .status-RUNTIME_ERROR, .status-MEMORY_LIMIT_EXCEEDED { background-color: #dc3545; }
 .status-COMPILATION_ERROR { background-color: #ffc107; color: black; }

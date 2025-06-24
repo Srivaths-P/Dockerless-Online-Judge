@@ -13,7 +13,7 @@
                 </option>
             {% endfor %}
         </select>
-        <button id="runBtn" class="btn btn-primary ms-3">
+        <button id="runBtn" class="btn btn-primary ms-3" data-toggle="tooltip" title="Ctrl + Enter">
             <span id="runBtnText"><i class="bi bi-play-fill"></i> Run Code</span>
             <span id="runSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
             <span id="runLoadingText" class="d-none">Running...</span>
@@ -155,6 +155,12 @@
 
         inputTextarea.addEventListener('input', saveState);
 
+        document.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter' && event.ctrlKey) {
+                runBtn.click();
+            }
+        });
+
         runBtn.addEventListener('click', async function () {
             const runBtnText = document.getElementById('runBtnText');
             const runSpinner = document.getElementById('runSpinner');
@@ -198,7 +204,7 @@
 
                 if (!response.ok) {
                     statusBadge.textContent = `Error: ${response.status}`;
-                    statusBadge.className = 'badge status-badge status-RUNTIME_ERROR';
+                    statusBadge.className = 'badge status-badge-small status-RUNTIME_ERROR';
                     stdoutOutput.textContent = result.detail || 'An unknown server error occurred.';
                     stdoutSection.classList.remove('d-none');
                     timeTaken.textContent = 'N/A';
@@ -206,14 +212,24 @@
                     return;
                 }
 
-                let statusKey = result.status.toUpperCase();
-                if (statusKey === 'SUCCESS' && result.exit_code !== 0) {
-                    statusKey = 'RUNTIME_ERROR';
+                let status = result.status;
+                if (status === 'success' && result.exit_code !== 0) {
+                    status = 'runtime_error';
                 }
 
-                const statusText = statusKey.replace(/_/g, ' ');
-                statusBadge.textContent = statusText;
-                statusBadge.className = 'badge status-badge status-' + statusKey;
+                const statusMap = {
+                    'success': { text: 'SUCCESS', css: 'ACCEPTED' },
+                    'timeout': { text: 'TIME LIMIT EXCEEDED', css: 'TIME_LIMIT_EXCEEDED' },
+                    'oom-kill': { text: 'MEMORY LIMIT EXCEEDED', css: 'MEMORY_LIMIT_EXCEEDED' },
+                    'compilation_error': { text: 'COMPILATION ERROR', css: 'COMPILATION_ERROR' },
+                    'internal_error': { text: 'INTERNAL ERROR', css: 'INTERNAL_ERROR' },
+                    'runtime_error': { text: 'RUNTIME ERROR', css: 'RUNTIME_ERROR' }
+                };
+
+                const statusInfo = statusMap[status] || statusMap['internal_error'];
+
+                statusBadge.textContent = statusInfo.text;
+                statusBadge.className = 'badge status-badge-small status-' + statusInfo.css;
 
                 timeTaken.textContent = result.execution_time_ms.toFixed(2);
                 memoryUsed.textContent = result.memory_used_kb;
@@ -233,7 +249,7 @@
             } catch (error) {
                 resultsDisplay.classList.remove('d-none');
                 statusBadge.textContent = 'Client Error';
-                statusBadge.className = 'badge status-badge status-INTERNAL_ERROR';
+                statusBadge.className = 'badge status-badge-small status-INTERNAL_ERROR';
                 stdoutOutput.textContent = 'Could not connect to the server. ' + error;
                 stdoutSection.classList.remove('d-none');
             } finally {
