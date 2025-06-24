@@ -44,32 +44,51 @@ async def run_sandboxed(
     if not cfg:
         return SandboxResult(status='internal_error', stderr=f"Unsupported language: {language}")
 
-    td = tempfile.mkdtemp(prefix=f"{unit_name_prefix}_{uuid.uuid4().hex[:8]}_")
+    host_td = tempfile.mkdtemp(prefix=f"{unit_name_prefix}_{uuid.uuid4().hex[:8]}_")
 
     try:
-        results_dir = os.path.join(td, "results")
-        os.makedirs(results_dir, exist_ok=True)
-        out_f = os.path.join(results_dir, "user.stdout")
-        err_f = os.path.join(results_dir, "user.stderr")
-        res_log_f = os.path.join(td, "res.log")
-        in_f = os.path.join(td, "input.txt")
-        wrapper_f = os.path.join(td, "wrapper.py")
+        host_workspace_dir = os.path.join(host_td, "workspace")
+        os.makedirs(host_workspace_dir, exist_ok=True)
 
-        with open(os.path.join(td, "user_code" + cfg["ext"]), 'w') as f:
+        host_wrapper_f = os.path.join(host_td, "wrapper.py")
+        host_res_log_f = os.path.join(host_td, "res.log")
+
+        host_user_code_f = os.path.join(host_workspace_dir, "user_code" + cfg["ext"])
+        host_input_f = os.path.join(host_workspace_dir, "input.txt")
+        host_stdout_f = os.path.join(host_workspace_dir, "user.stdout")
+        host_stderr_f = os.path.join(host_workspace_dir, "user.stderr")
+
+        open(host_res_log_f, 'w').close()
+
+        with open(host_user_code_f, 'w') as f:
             f.write(code)
         if run_input is not None:
-            with open(in_f, 'w') as f: f.write(run_input)
+            with open(host_input_f, 'w') as f: f.write(run_input)
+
+        sandbox_wrapper_path = "/judge/wrapper.py"
 
         compilation_stderr = None
         if cfg["compile"]:
             unit_c = f"{unit_name_prefix}-compile-{uuid.uuid4().hex[:4]}"
-            with open(wrapper_f, 'w') as f:
+            with open(host_wrapper_f, 'w') as f:
                 f.write(COMPILE_WRAPPER)
-            bwrap_args_c = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
-                            "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
-                            "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                            "--unshare-pid", "--unshare-net",
-                            PYTHON3, "/sandbox/wrapper.py"] + cfg["compile"]
+
+            bwrap_args_c = [
+                               "--tmpfs", "/",
+                               "--proc", "/proc", "--dev", "/dev",
+                               "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib", "--ro-bind", "/lib64",
+                               "/lib64",
+                               "--symlink", "usr/bin", "/bin",
+                               "--dir", "/tmp",
+                               "--dir", "/workspace",
+                               "--dir", "/judge",
+                               "--bind", host_workspace_dir, "/workspace",
+                               "--ro-bind", host_wrapper_f, sandbox_wrapper_path,
+                               "--bind", host_res_log_f, "/tmp/res.log",
+                               "--chdir", "/workspace",
+                               "--unshare-pid", "--unshare-net",
+                               PYTHON3, sandbox_wrapper_path,
+                           ] + cfg["compile"]
 
             compile_env = os.environ.copy()
             compile_env['CPU_LIMIT_S'] = '30'
@@ -78,15 +97,15 @@ async def run_sandboxed(
             )
             compile_exit_code = -1
             try:
-                with open(res_log_f, 'r') as f:
+                with open(host_res_log_f, 'r') as f:
                     for line in f:
                         if line.startswith("EXIT_CODE:"):
                             compile_exit_code = int(line.strip().split(':')[1])
             except (IOError, IndexError, ValueError):
                 pass
             if cres.get("systemd_result") != "success" or compile_exit_code != 0:
-                if os.path.exists(err_f):
-                    with open(err_f, 'r', errors='ignore') as f:
+                if os.path.exists(host_stderr_f):
+                    with open(host_stderr_f, 'r', errors='ignore') as f:
                         compilation_stderr = f.read(4096).strip()
                 if cres.get("systemd_result") == "timeout":
                     compilation_stderr = "Compilation Timed Out (Wall Clock).\n" + (compilation_stderr or "")
@@ -94,28 +113,40 @@ async def run_sandboxed(
                     compilation_stderr = "Compilation Memory Limit Exceeded.\n" + (compilation_stderr or "")
                 return SandboxResult(status='compilation_error',
                                      compilation_stderr=compilation_stderr or "Compilation failed.")
-            executable_path = os.path.join(td, "user_exec")
-            if not os.path.exists(executable_path):
+
+            host_executable_path = os.path.join(host_workspace_dir, "user_exec")
+            if not os.path.exists(host_executable_path):
                 return SandboxResult(status='internal_error',
                                      stderr="Compiler succeeded but produced no executable file.")
-            os.chmod(executable_path, 0o755)
+            os.chmod(host_executable_path, 0o755)
 
-        with open(wrapper_f, 'w') as f:
+        with open(host_wrapper_f, 'w') as f:
             f.write(EXECUTION_WRAPPER)
 
         unit_e = f"{unit_name_prefix}-exec-{uuid.uuid4().hex[:4]}"
         command_to_wrap = cfg["run"]
-        bwrap_args_e = ["--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib",
-                        "--ro-bind", "/lib64", "/lib64", "--bind", td, "/sandbox",
-                        "--proc", "/proc", "--dev", "/dev", "--chdir", "/sandbox",
-                        "--unshare-pid", "--unshare-net"]
+
+        bwrap_args_e = [
+            "--tmpfs", "/",
+            "--proc", "/proc", "--dev", "/dev",
+            "--ro-bind", "/usr", "/usr", "--ro-bind", "/lib", "/lib", "--ro-bind", "/lib64", "/lib64",
+            "--symlink", "usr/bin", "/bin",
+            "--dir", "/tmp",
+            "--dir", "/workspace",
+            "--dir", "/judge",
+            "--bind", host_workspace_dir, "/workspace",
+            "--ro-bind", host_wrapper_f, sandbox_wrapper_path,
+            "--bind", host_res_log_f, "/tmp/res.log",
+            "--chdir", "/workspace",
+            "--unshare-pid", "--unshare-net"
+        ]
 
         if extra_bind_files:
             for host_path, sandbox_path in extra_bind_files:
                 bwrap_args_e.extend(["--ro-bind", host_path, sandbox_path])
 
         final_command = command_to_wrap + (cmd_args or [])
-        bwrap_args_e.extend([PYTHON3, "/sandbox/wrapper.py"] + final_command)
+        bwrap_args_e.extend([PYTHON3, sandbox_wrapper_path] + final_command)
 
         exec_env = os.environ.copy()
         exec_env['CPU_LIMIT_S'] = str(time_limit_sec)
@@ -126,7 +157,7 @@ async def run_sandboxed(
 
         exec_ms, mem_kb, exit_code, signal_num = 0.0, 0, -1, 0
         try:
-            with open(res_log_f, 'r') as f:
+            with open(host_res_log_f, 'r') as f:
                 for line in f:
                     if line.startswith("EXIT_CODE:"): exit_code = int(line.strip().split(':')[1])
                     if line.startswith("SIGNAL:"): signal_num = int(line.strip().split(':')[1])
@@ -137,12 +168,14 @@ async def run_sandboxed(
 
         status = 'internal_error'
         if signal_num != 0:
-            if signal_num == signal.SIGXCPU or signal_num == signal.SIGKILL:
+            if signal_num == signal.SIGXCPU:
                 status = 'timeout'
             else:
                 status = 'runtime_error'
-        else:
+        elif exit_code == 0:
             status = 'success'
+        else:
+            status = 'runtime_error'
 
         sysd = eres.get("systemd_result")
         if sysd == "oom-kill":
@@ -154,24 +187,20 @@ async def run_sandboxed(
             exec_ms = float(time_limit_sec * 1000)
 
         stdout_content, stderr_content = None, None
-        if os.path.exists(out_f):
-            with open(out_f, 'r', errors='ignore') as f:
+        if os.path.exists(host_stdout_f):
+            with open(host_stdout_f, 'r', errors='ignore') as f:
                 stdout_content = f.read()
-        if os.path.exists(err_f):
-            with open(err_f, 'r', errors='ignore') as f:
+        if os.path.exists(host_stderr_f):
+            with open(host_stderr_f, 'r', errors='ignore') as f:
                 stderr_content = f.read(4096).strip() or None
 
         return SandboxResult(
-            status=status,
-            exit_code=exit_code,
-            stdout=stdout_content,
-            stderr=stderr_content,
-            execution_time_ms=exec_ms,
-            memory_used_kb=mem_kb,
-            compilation_stderr=compilation_stderr
+            status=status, exit_code=exit_code, stdout=stdout_content,
+            stderr=stderr_content, execution_time_ms=exec_ms,
+            memory_used_kb=mem_kb, compilation_stderr=compilation_stderr
         )
     except Exception as e:
         traceback.print_exc()
         return SandboxResult(status='internal_error', stderr=f"Sandbox engine critical error: {e}")
     finally:
-        shutil.rmtree(td, ignore_errors=True)
+        shutil.rmtree(host_td, ignore_errors=True)

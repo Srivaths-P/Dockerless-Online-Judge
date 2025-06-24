@@ -9,7 +9,6 @@ PYTHON3 = "/usr/bin/python3"
 GCC = "/usr/bin/gcc"
 GPP = os.getenv("GPP_PATH", "/usr/bin/g++")
 
-# --- FIX: Wrapper now only reports raw exit/signal data ---
 EXECUTION_WRAPPER = """
 import os
 import resource
@@ -18,10 +17,10 @@ import signal
 import time
 
 command = sys.argv[1:]
-stdin_path = '/sandbox/input.txt'
-stdout_path = '/sandbox/results/user.stdout'
-stderr_path = '/sandbox/results/user.stderr'
-res_log_path = '/sandbox/res.log'
+stdin_path = '/workspace/input.txt'
+stdout_path = '/workspace/user.stdout'
+stderr_path = '/workspace/user.stderr'
+res_log_path = '/tmp/res.log'
 
 cpu_limit_sec = int(os.environ['CPU_LIMIT_S'])
 
@@ -71,25 +70,25 @@ else:
     os.close(stderr_fd)
 """
 
-COMPILE_WRAPPER = EXECUTION_WRAPPER.replace("'/sandbox/input.txt'", "'/dev/null'")
+COMPILE_WRAPPER = EXECUTION_WRAPPER.replace("'/workspace/input.txt'", "'/dev/null'")
 
 LANGUAGE_CONFIG: Dict[str, Dict[str, Any]] = {
     "python": {
         "ext": ".py",
         "compile": None,
-        "run": [PYTHON3, "/sandbox/user_code.py"]
+        "run": [PYTHON3, "/workspace/user_code.py"]
     },
     "c": {
         "ext": ".c",
-        "compile": [GCC, "/sandbox/user_code.c", "-o", "/sandbox/user_exec",
+        "compile": [GCC, "/workspace/user_code.c", "-o", "/workspace/user_exec",
                     "-O2", "-std=c11", "-lm"],
-        "run": ["/sandbox/user_exec"]
+        "run": ["/workspace/user_exec"]
     },
     "c++": {
         "ext": ".cpp",
-        "compile": [GPP, "/sandbox/user_code.cpp", "-o", "/sandbox/user_exec",
+        "compile": [GPP, "/workspace/user_code.cpp", "-o", "/workspace/user_exec",
                     "-O2", "-std=c++17"],
-        "run": ["/sandbox/user_exec"]
+        "run": ["/workspace/user_exec"]
     },
 }
 
