@@ -46,6 +46,14 @@
                             class="badge bg-secondary">{{ submission.language|title if submission.language else 'N/A' }}</span>
                     </p>
                 </div>
+                {% if submission.status.value not in ['ACCEPTED', 'PENDING', 'RUNNING'] %}
+                <div class="text-center">
+                    <a class="btn btn-warning"
+                       href="{{ url_for('ui_problem_detail', contest_id=submission.contest_id, problem_id=submission.problem_id) }}">
+                        <i class="bi bi-arrow-clockwise"></i> Try Problem Again
+                    </a>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

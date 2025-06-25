@@ -99,6 +99,7 @@
                     <div class="mb-3">
                         <label class="form-label visually-hidden" for="codeTextarea">Code:</label>
                         <textarea class="form-control" id="codeTextarea" name="code" required></textarea>
+                        <div id="code-error" class="text-warning small mt-2 d-none"></div>
                     </div>
                     <div class="d-grid">
                         <button class="btn btn-primary btn-lg" id="submitBtn" type="button">
@@ -125,82 +126,84 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const codeTextarea = document.getElementById('codeTextarea');
-            if (!codeTextarea) return;
+            if (codeTextarea) {
+                const languageSelect = document.getElementById('languageSelect');
+                const submissionForm = document.getElementById('submissionForm');
+                const clearBtn = document.getElementById('clearCodeBtn');
+                const submitBtn = document.getElementById('submitBtn');
+                const codeError = document.getElementById('code-error');
 
-            const languageSelect = document.getElementById('languageSelect');
-            const submissionForm = document.getElementById('submissionForm');
-            const clearBtn = document.getElementById('clearCodeBtn');
-            const submitBtn = document.getElementById('submitBtn');
+                const storageKey = `doj-code-{{ contest_id }}-{{ problem.id }}`;
+                const langStorageKey = `doj-lang-{{ contest_id }}-{{ problem.id }}`;
 
-            const storageKey = `doj-code-{{ contest_id }}-{{ problem.id }}`;
-            const langStorageKey = `doj-lang-{{ contest_id }}-{{ problem.id }}`;
+                let editor;
 
-            let editor;
-
-            function saveCode() {
-                if (editor) {
-                    localStorage.setItem(storageKey, editor.getValue());
-                    localStorage.setItem(langStorageKey, languageSelect.value);
+                function saveCode() {
+                    if (editor) {
+                        localStorage.setItem(storageKey, editor.getValue());
+                        localStorage.setItem(langStorageKey, languageSelect.value);
+                    }
                 }
+
+                function loadCode() {
+                    const savedCode = localStorage.getItem(storageKey) || '';
+                    const savedLang = localStorage.getItem(langStorageKey);
+
+                    if (savedLang) { languageSelect.value = savedLang; }
+
+                    const mode = languageSelect.options[languageSelect.selectedIndex].dataset.codemirrorMode;
+                    const customKeys = {
+                        "F11": (cm) => cm.setOption("fullScreen", !cm.getOption("fullScreen")),
+                        "Esc": (cm) => { if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false); }
+                    };
+
+                    editor = initializeCodeMirror('codeTextarea', { mode: mode, extraKeys: customKeys });
+                    editor.setValue(savedCode);
+                }
+
+                loadCode();
+
+                let changeTimeout;
+                editor.on('change', () => {
+                    clearTimeout(changeTimeout);
+                    changeTimeout = setTimeout(saveCode, 300);
+
+                    if (!codeError.classList.contains('d-none')) {
+                        codeError.classList.add('d-none');
+                    }
+                });
+                editor.on('blur', saveCode);
+
+                languageSelect.addEventListener('change', function () {
+                    const selectedMode = this.options[this.selectedIndex].dataset.codemirrorMode;
+                    if(editor) {
+                       editor.setOption("mode", selectedMode);
+                    }
+                    saveCode();
+                });
+
+                clearBtn.addEventListener('click', () => {
+                    if (editor) editor.setValue('');
+                });
+
+                submitBtn.addEventListener('click', function() {
+                    if (editor) {
+                        editor.save();
+                    }
+
+                    if (!codeTextarea.value.trim()) {
+                        codeError.textContent = "Code cannot be empty. Please enter your solution.";
+                        codeError.classList.remove('d-none');
+                        return;
+                    }
+
+                    submissionForm.submit();
+                });
             }
 
-            function loadCode() {
-                const savedCode = localStorage.getItem(storageKey) || '';
-                const savedLang = localStorage.getItem(langStorageKey);
-
-                if (savedLang) { languageSelect.value = savedLang; }
-
-                const mode = languageSelect.options[languageSelect.selectedIndex].dataset.codemirrorMode;
-                const customKeys = {
-                    "F11": (cm) => cm.setOption("fullScreen", !cm.getOption("fullScreen")),
-                    "Esc": (cm) => { if (cm.getOption("fullScreen")) cm.setOption("fullScreen", false); }
-                };
-
-                editor = initializeCodeMirror('codeTextarea', { mode: mode, extraKeys: customKeys });
-                editor.setValue(savedCode);
-            }
-
-            loadCode();
-
-            let changeTimeout;
-            editor.on('change', () => {
-                clearTimeout(changeTimeout);
-                changeTimeout = setTimeout(saveCode, 300);
-            });
-            editor.on('blur', saveCode);
-
-            languageSelect.addEventListener('change', function () {
-                const selectedMode = this.options[this.selectedIndex].dataset.codemirrorMode;
-                if(editor) {
-                   editor.setOption("mode", selectedMode);
-                }
-                saveCode();
-            });
-
-            clearBtn.addEventListener('click', () => {
-                if (editor) editor.setValue('');
-            });
-
-            submitBtn.addEventListener('click', function() {
-                submissionForm.requestSubmit();
-            });
-
-            submissionForm.addEventListener('submit', function (event) {
-                if (editor) editor.save();
-                if (!codeTextarea.value.trim()) {
-                    alert("Code cannot be empty.");
-                    event.preventDefault();
-                }
-            });
-        });
-    </script>
-
-    {% if generator_available %}
-        <script>
-            document.addEventListener('DOMContentLoaded', function () {
-                const generateButton = document.getElementById('generateTestcaseBtn');
-                if (!generateButton) return;
-
+            {% if generator_available %}
+            const generateButton = document.getElementById('generateTestcaseBtn');
+            if (generateButton) {
                 const generateButtonText = document.getElementById('generateButtonText');
                 const generateSpinner = document.getElementById('generateSpinner');
                 const generateLoadingText = document.getElementById('generateLoadingText');
@@ -258,8 +261,9 @@
                         generateLoadingText.classList.add('d-none');
                     }
                 });
-            });
-        </script>
-    {% endif %}
+            }
+            {% endif %}
+        });
+    </script>
     {% endif %}
 {% endblock %}
