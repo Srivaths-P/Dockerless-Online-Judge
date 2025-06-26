@@ -129,8 +129,8 @@ pre {
 
 @media (min-width: 992px) {
     .ide-io-pane {
-        flex-basis: 33%;
-        min-width: 0;
+        flex-basis: 30%;
+        min-width: 30%;
     }
 }
 
