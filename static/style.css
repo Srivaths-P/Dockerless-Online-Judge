@@ -95,6 +95,11 @@ pre {
     height: 100%;
 }
 
+.ide-editor-pane .card,
+.ide-editor-pane .card-body {
+    height: 100%;
+}
+
 .ide-container {
     display: flex;
     flex-direction: column;
@@ -112,6 +117,7 @@ pre {
     flex-grow: 1;
     min-height: 300px;
     display: flex;
+    min-width: 0;
 }
 
 .ide-io-pane {
