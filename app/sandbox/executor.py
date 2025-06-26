@@ -95,7 +95,13 @@ async def _judge_test_case(
                 ]
             )
 
-            if validator_result.status != 'success' or validator_result.exit_code is None:
+            is_validator_failure = (
+                    validator_result.status not in ('success', 'runtime_error')
+                    or validator_result.exit_code is None
+                    or validator_result.exit_code < 0
+            )
+
+            if is_validator_failure:
                 return TestCaseResult(
                     test_case_name=test_case.name, status=SubmissionStatus.INTERNAL_ERROR,
                     stderr=f"Judge Validator Error: The validator failed to execute (Status: {validator_result.status}). Please contact an admin.",
