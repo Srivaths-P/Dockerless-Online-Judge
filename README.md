@@ -24,6 +24,7 @@ Contests and problems are defined through a simple filesystem structure, making 
 *   **Advanced Judging Logic:**
     *   **Custom Validators:** Support for problems with multiple correct answers via custom validator scripts.
     *   **Test Case Generators:** Problems can include a `generator` script that users can trigger from the UI to see sample test cases.
+*   **Integrated Web IDE**: A rich, in-browser code editor with syntax highlighting, code folding, and local storage persistence, allowing users to test code against custom input before submission.  
 *   **Contest Lifecycle Management:** Full support for `Upcoming`, `Active`, and `Ended` contest states, with access controls to hide problems before a contest starts and block submissions after it ends.
 *   **Configuration & UX:**
     *   Configurable cooldowns for submissions, IDE runs, and test case generation.
@@ -119,11 +120,10 @@ To find your UID, run:
 id -u <your-username>
 ```
 
-**3. Enable and Start the Service:**
+Then enable and start the service
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl start doj.service
-sudo systemctl enable doj.service
+sudo systemctl enable --now doj.service
 ```
 
 ## Hot-Reloading Contest Data
@@ -239,6 +239,7 @@ A generator script allows users to create sample test cases from the UI.
     *   Real-time submission status updates via WebSockets or Server-Sent Events (currently uses periodic polling).
     *   Live contest leaderboards.
     *   Post-contest statistics and ability to view others' solutions.
+    *   Faster loading times by bundling the frontend assets.
 *   **Backend & Deployment:**
     *   Admin dashboard for managing users and contests.
     *   Support for PostgreSQL as a production database backend.
