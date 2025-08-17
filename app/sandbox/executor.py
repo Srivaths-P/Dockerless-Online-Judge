@@ -40,10 +40,12 @@ async def _judge_test_case(
     if user_run_result.status == 'compilation_error':
         return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.COMPILATION_ERROR,
                               stderr=user_run_result.compilation_stderr)
+
     if user_run_result.status == 'timeout':
         return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.TIME_LIMIT_EXCEEDED,
                               execution_time_ms=user_run_result.execution_time_ms,
                               memory_used_kb=user_run_result.memory_used_kb)
+
     if user_run_result.status == 'oom-kill':
         return TestCaseResult(test_case_name=test_case.name, status=SubmissionStatus.MEMORY_LIMIT_EXCEEDED,
                               execution_time_ms=user_run_result.execution_time_ms,

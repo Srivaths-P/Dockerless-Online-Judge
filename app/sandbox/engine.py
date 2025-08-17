@@ -168,7 +168,7 @@ async def run_sandboxed(
 
         status = 'internal_error'
         if signal_num != 0:
-            if signal_num == signal.SIGXCPU:
+            if signal_num == signal.SIGXCPU or signal_num == signal.SIGKILL:
                 status = 'timeout'
             else:
                 status = 'runtime_error'
