@@ -16,16 +16,16 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class UserInDBBase(UserBase):
+class UserPublicBase(UserBase):
     id: int
     is_active: bool
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class User(UserInDBBase):
+class UserPublic(UserPublicBase):
     pass
 
 
-class UserInDB(UserInDBBase):
+class UserInDB(UserPublicBase):
     pass

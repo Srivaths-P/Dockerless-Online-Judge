@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.db import models as db_models
-from app.schemas.submission import SubmissionCreate, Submission as SubmissionSchema, SubmissionInfo
+from app.schemas.submission import SubmissionCreate, SubmissionPublic, SubmissionInfo
 from app.services import contest_service, submission_service
 
 router = APIRouter()
@@ -15,7 +15,7 @@ router = APIRouter()
 async def create_new_submission(
         submission_in: SubmissionCreate,
         db: Session = Depends(deps.get_db),
-        current_user: db_models.User = Depends(deps.get_current_active_user_from_cookie)
+        current_user: db_models.User = Depends(deps.get_user_auth_cookie)
 ):
     contest_service.get_contest_problem(
         contest_id=submission_in.contest_id, problem_id=submission_in.problem_id
@@ -39,11 +39,11 @@ async def create_new_submission(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to process submission.")
 
 
-@router.get("/{submission_id}", response_model=SubmissionSchema)
+@router.get("/{submission_id}", response_model=SubmissionPublic)
 async def get_submission_details(
         submission_id: str,
         db: Session = Depends(deps.get_db),
-        current_user: db_models.User = Depends(deps.get_current_active_user_from_cookie)
+        current_user: db_models.User = Depends(deps.get_user_auth_cookie)
 ):
     submission = submission_service.get_submission_by_id(db=db, submission_id=submission_id, current_user=current_user)
     if not submission:
@@ -54,6 +54,6 @@ async def get_submission_details(
 @router.get("/", response_model=List[SubmissionInfo])
 async def get_user_submissions_api(
         db: Session = Depends(deps.get_db),
-        current_user: db_models.User = Depends(deps.get_current_active_user_from_cookie)
+        current_user: db_models.User = Depends(deps.get_user_auth_cookie)
 ):
     return submission_service.get_all_submissions_for_user(db=db, current_user=current_user)

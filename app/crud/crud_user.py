@@ -32,8 +32,9 @@ class CRUDUser(CRUDBase[User, UserCreate, UserUpdate]):
 
         return super().update(db, db_obj=db_obj, obj_in=update_data)
 
-    def is_active(self, user: User) -> bool:
-        return user.is_active
+    @staticmethod
+    def is_active(db_user: User) -> bool:
+        return db_user.is_active
 
 
 user = CRUDUser(User)

@@ -11,8 +11,7 @@ from app.crud import crud_submission
 from app.db import models as db_models
 from app.sandbox.executor import submission_processing_queue
 from app.schemas.submission import (
-    SubmissionCreate, SubmissionStatus, SubmissionInfo, TestCaseResult,
-    Submission as SubmissionSchema
+    SubmissionCreate, SubmissionStatus, SubmissionInfo, TestCaseResult, SubmissionPublic
 )
 from app.services.contest_service import check_submission
 
@@ -69,7 +68,6 @@ async def create_submission(
 
     db_submission = None
     try:
-        print(f"Service: Calling crud_submission.submission.create_with_owner...")
         db_submission = crud_submission.submission.create_with_owner(
             db=db, obj_in=submission_data, submitter_id=current_user.id
         )
@@ -79,7 +77,6 @@ async def create_submission(
         db.merge(current_user)
         db.commit()
         db.refresh(db_submission)
-
 
     except Exception as e:
         import traceback
@@ -115,8 +112,8 @@ def get_submission_by_id(
         db: Session,
         submission_id: str,
         current_user: db_models.User
-) -> SubmissionSchema:
-    db_submission = crud_submission.submission.get_submission_with_owner_info(
+) -> SubmissionPublic:
+    db_submission = crud_submission.submission.get_user_submission(
         db, id=submission_id, submitter_id=current_user.id
     )
 
@@ -180,7 +177,7 @@ def get_submission_by_id(
     submitter = db_submission.submitter
     user_email = submitter.email if submitter else "Unknown User"
 
-    return SubmissionSchema(
+    return SubmissionPublic(
         id=str(db_submission.id),
         problem_id=db_submission.problem_id,
         contest_id=db_submission.contest_id,

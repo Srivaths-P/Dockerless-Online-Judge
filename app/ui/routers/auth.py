@@ -77,7 +77,7 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
             log_user_event(user.id, user.email, "user_register_google")
             flash(request, "Account created and logged in successfully!", "success")
         else:
-            if not user.is_active:
+            if not crud_user.user.is_active(user):
                 log_user_event(user.id, user.email, "login_failed", {"reason": "Inactive user"})
                 flash(request, "Your account is inactive. Please contact an administrator.", "danger")
                 return RedirectResponse(url=str(request.url_for("ui_home")), status_code=HTTP_303_SEE_OTHER)

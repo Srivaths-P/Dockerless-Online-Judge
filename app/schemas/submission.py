@@ -42,7 +42,7 @@ class SubmissionUpdate(BaseModel):
     results: Optional[List[TestCaseResult]] = None
 
 
-class SubmissionInDBBase(SubmissionBase):
+class SubmissionPublicBase(SubmissionBase):
     id: str
     submitter_id: int
     status: SubmissionStatus
@@ -53,11 +53,11 @@ class SubmissionInDBBase(SubmissionBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class Submission(SubmissionInDBBase):
+class SubmissionPublic(SubmissionPublicBase):
     pass
 
 
-class SubmissionInDB(SubmissionInDBBase):
+class SubmissionInDB(SubmissionPublicBase):
     results_json: Optional[str] = None
 
 

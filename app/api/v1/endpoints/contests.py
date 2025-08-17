@@ -6,13 +6,12 @@ from typing import List, Dict, Optional
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, verify_reload_token
+from app.api.deps import get_db, verify_reload_token, get_user_auth_cookie
 from app.db import models as db_models
 from app.schemas.contest import Contest, ContestMinimal
 from app.schemas.problem import ProblemPublic
 from app.services import contest_service
 from app.services import generator_service
-from app.ui.deps import get_current_user_from_cookie
 
 router = APIRouter()
 
@@ -50,13 +49,13 @@ async def reload_contest_data(
 
 @router.get("/", response_model=List[ContestMinimal])
 async def read_contests(
-        current_user: db_models.User = Depends(get_current_user_from_cookie)):
+        current_user: db_models.User = Depends(get_user_auth_cookie)):
     return contest_service.get_all_contests()
 
 
 @router.get("/{contest_id}", response_model=Contest)
 async def read_contest(contest_id: str,
-                       current_user: db_models.User = Depends(get_current_user_from_cookie)):
+                       current_user: db_models.User = Depends(get_user_auth_cookie)):
     contest = contest_service.get_contest_by_id(contest_id)
     if not contest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contest not found")
@@ -67,7 +66,7 @@ async def read_contest(contest_id: str,
 async def read_problem_details(
         contest_id: str,
         problem_id: str,
-        current_user: db_models.User = Depends(get_current_user_from_cookie)
+        current_user: db_models.User = Depends(get_user_auth_cookie)
 ):
     problem = contest_service.get_contest_problem(
         contest_id=contest_id, problem_id=problem_id
@@ -84,7 +83,7 @@ async def generate_problem_testcase(
         contest_id: str,
         problem_id: str,
         db: Session = Depends(get_db),
-        current_user: db_models.User = Depends(get_current_user_from_cookie)
+        current_user: db_models.User = Depends(get_user_auth_cookie)
 ) -> Dict[str, Optional[str]]:
     try:
         contest_service.get_contest_problem(

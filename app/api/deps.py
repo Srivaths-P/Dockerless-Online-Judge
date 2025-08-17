@@ -1,6 +1,7 @@
 from typing import Generator, Optional
 
 from fastapi import Depends, HTTPException, status, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
@@ -9,10 +10,12 @@ from app.crud import crud_user
 from app.db import models as db_models
 from app.db.session import SessionLocal
 from app.schemas.token import TokenData
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 
 def get_db() -> Generator:
+    """
+    Provides a database session for dependency injection in FastAPI routes.
+    """
     db = SessionLocal()
     try:
         yield db
@@ -20,8 +23,8 @@ def get_db() -> Generator:
         db.close()
 
 
-async def get_current_user_from_cookie(
-    request: Request, db: Session = Depends(get_db)
+async def get_user_cookie(
+        request: Request, db: Session = Depends(get_db)
 ) -> db_models.User:
     """
     Reads and validates a JWT from a cookie. Used for API endpoints called by the UI.
@@ -47,8 +50,9 @@ async def get_current_user_from_cookie(
         raise credentials_exception
     return user
 
-async def get_current_active_user_from_cookie(
-    current_user: db_models.User = Depends(get_current_user_from_cookie),
+
+async def get_user_auth_cookie(
+        current_user: db_models.User = Depends(get_user_cookie),
 ) -> db_models.User:
     """
     Checks if a user authenticated via cookie is active.
@@ -61,6 +65,9 @@ async def get_current_active_user_from_cookie(
 async def verify_reload_token(
         auth: HTTPAuthorizationCredentials = Depends(HTTPBearer())
 ) -> bool:
+    """
+    Verifies the reload token provided in the Authorization header.
+    """
     if not settings.ADMIN_RELOAD_TOKEN:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Reload key not configured.")
 

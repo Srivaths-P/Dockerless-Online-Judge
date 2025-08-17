@@ -15,9 +15,9 @@
         </div>
         {% if contest.start_time %}
             <p class="text-muted mb-1"><small>
-                Starts: <span class="utc-to-local" data-datetime="{{ contest.start_time | safe_isoformat }}">{{ contest.start_time.strftime('%d-%m-%Y %H:%M %Z') }}</span>
+                Starts: <span class="utc-to-local" data-datetime="{{ contest.start_time | to_isoformat }}">{{ contest.start_time.strftime('%d-%m-%Y %H:%M %Z') }}</span>
                 {% if contest.duration_minutes is not none %}
-                    | Ends: <span class="utc-to-local" data-datetime="{{ (contest.start_time + G.timedelta_class(minutes=contest.duration_minutes)) | safe_isoformat }}">{{ (contest.start_time + G.timedelta_class(minutes=contest.duration_minutes)).strftime('%d-%m-%Y %H:%M %Z') }}</span>
+                    | Ends: <span class="utc-to-local" data-datetime="{{ (contest.start_time + G.timedelta_class(minutes=contest.duration_minutes)) | to_isoformat }}">{{ (contest.start_time + G.timedelta_class(minutes=contest.duration_minutes)).strftime('%d-%m-%Y %H:%M %Z') }}</span>
                 {% endif %}
             </small></p>
         {% endif %}

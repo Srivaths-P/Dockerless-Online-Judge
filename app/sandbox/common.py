@@ -7,7 +7,7 @@ SUPPORTED_IDE_LANGUAGES = ["python", "c++", "c"]
 BWRAP = "/usr/bin/bwrap"
 PYTHON3 = "/usr/bin/python3"
 GCC = "/usr/bin/gcc"
-GPP = os.getenv("GPP_PATH", "/usr/bin/g++")
+GPP = "/usr/bin/g++"
 
 EXECUTION_WRAPPER = """
 import os

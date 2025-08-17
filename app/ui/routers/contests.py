@@ -82,7 +82,7 @@ async def contest_detail(request: Request, contest_id: str,
     is_upcoming = category == "Upcoming"
 
     if not is_upcoming:
-        user_submissions = crud_submission.submission.get_user_submissions_for_contest(
+        user_submissions = crud_submission.submission.get_user_contest_submissions(
             db, submitter_id=current_user.id, contest_id=contest_id
         )
 

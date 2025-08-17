@@ -28,8 +28,9 @@ class CRUDSubmission(CRUDBase[Submission, SubmissionCreate, SubmissionUpdate]):
 
         return db.query(self.model).filter(self.model.id == id_str).first()
 
+    @staticmethod
     def create_with_owner(
-            self, db: Session, *, obj_in: SubmissionCreate, submitter_id: int
+            db: Session, *, obj_in: SubmissionCreate, submitter_id: int
     ) -> Submission:
         results_list_for_json: List[Dict] = []
         db_obj = Submission(
@@ -64,7 +65,7 @@ class CRUDSubmission(CRUDBase[Submission, SubmissionCreate, SubmissionUpdate]):
             .all()
         )
 
-    def get_user_submissions_for_contest(
+    def get_user_contest_submissions(
             self, db: Session, *, submitter_id: int, contest_id: str
     ) -> List[Submission]:
         return (
@@ -77,8 +78,8 @@ class CRUDSubmission(CRUDBase[Submission, SubmissionCreate, SubmissionUpdate]):
             .all()
         )
 
+    @staticmethod
     def update_submission_results(
-            self,
             db: Session,
             *,
             db_obj: Submission,
@@ -103,7 +104,7 @@ class CRUDSubmission(CRUDBase[Submission, SubmissionCreate, SubmissionUpdate]):
             db.rollback()
             raise
 
-    def get_submission_with_owner_info(self, db: Session, id: str, submitter_id: int) -> Optional[Submission]:
+    def get_user_submission(self, db: Session, id: str, submitter_id: int) -> Optional[Submission]:
         try:
             uuid.UUID(id)
         except ValueError:

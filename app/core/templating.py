@@ -17,7 +17,7 @@ templates.env.globals["get_flashed_messages"] = get_flashed_messages
 templates.env.globals["G"] = {"datetime_class": datetime, "timedelta_class": timedelta}
 
 
-def safe_isoformat(dt: datetime) -> str:
+def to_isoformat(dt: datetime) -> str:
     if not dt:
         return ""
     if dt.tzinfo is None:
@@ -25,7 +25,7 @@ def safe_isoformat(dt: datetime) -> str:
     return dt.isoformat()
 
 
-templates.env.filters["safe_isoformat"] = safe_isoformat
+templates.env.filters["to_isoformat"] = to_isoformat
 
 
 def markdown_filter(text):
