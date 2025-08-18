@@ -8,12 +8,13 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    pass
+    password: str
 
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     is_active: Optional[bool] = None
+    password: Optional[str] = None
 
 
 class UserPublicBase(UserBase):

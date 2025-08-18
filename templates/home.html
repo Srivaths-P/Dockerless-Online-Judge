@@ -10,7 +10,7 @@
                 {% if current_user %}
                     You are logged in as <strong>{{ current_user.email }}</strong>.
                 {% else %}
-                    Please sign in with your Google account to get started.
+                    Please log in to get started.
                 {% endif %}
             </p>
             <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
@@ -20,9 +20,8 @@
                     <a class="btn btn-outline-secondary btn-lg px-4" href="{{ url_for('ui_my_submissions') }}">My
                         Submissions</a>
                 {% else %}
-                    {% set next_url = request.query_params.get('next', '') %}
                     <a class="btn btn-primary btn-lg px-4 gap-3" href="{{ url_for('ui_login_form') }}">
-                        <i class="bi bi-google"></i> Sign in with Google
+                        Login
                     </a>
                 {% endif %}
             </div>
