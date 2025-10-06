@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
@@ -13,6 +14,7 @@ SERVER_DATA_PATH = "server_data"
 CONTESTS_PATH = os.path.join(SERVER_DATA_PATH, "contests")
 
 _contests_db: Dict[str, Contest] = {}
+logger = logging.getLogger(__name__)
 
 
 def _parse_settings_data(settings_data: Dict) -> Dict:
@@ -24,7 +26,7 @@ def _parse_settings_data(settings_data: Dict) -> Dict:
                 if parsed_settings[key].tzinfo is None:
                     parsed_settings[key] = parsed_settings[key].replace(tzinfo=timezone.utc)
             except ValueError:
-                print(f"Warning: Could not parse start_time '{value}' as ISO 8601 datetime.")
+                logger.warning(f"Could not parse start_time '{value}' as ISO 8601 datetime.")
                 parsed_settings[key] = None
         elif key in ['time_limit_sec', 'memory_limit_mb', 'generator_memory_limit_mb', 'submission_cooldown_sec',
                      'generator_cooldown_sec', 'validator_memory_limit_mb',
@@ -32,13 +34,13 @@ def _parse_settings_data(settings_data: Dict) -> Dict:
             try:
                 parsed_settings[key] = int(value)
             except (ValueError, TypeError):
-                print(f"Warning: Invalid integer value for {key}: {value}. Using default or None.")
+                logger.warning(f"Invalid integer value for {key}: {value}. Using default or None.")
                 parsed_settings[key] = None
         elif key == 'generator_time_limit_sec' and value is not None:
             try:
                 parsed_settings[key] = float(value)
             except (ValueError, TypeError):
-                print(f"Warning: Invalid float value for {key}: {value}. Using default or None.")
+                logger.warning(f"Invalid float value for {key}: {value}. Using default or None.")
                 parsed_settings[key] = None
         elif key == 'allow_upsolving' and isinstance(value, bool):
             parsed_settings[key] = value
@@ -60,7 +62,7 @@ def _load_problem(contest_id: str, problem_id: str, problem_path: str) -> Option
         with open(settings_json_path, "r", encoding='utf-8') as f:
             settings_data_raw = json.load(f)
     except Exception as e:
-        print(f"An unexpected error occurred loading problem {problem_id} base files: {e}")
+        logger.error(f"An unexpected error occurred loading problem {problem_id} base files: {e}", exc_info=True)
         return None
 
     settings_data = _parse_settings_data(settings_data_raw)
@@ -111,7 +113,7 @@ def _load_problem(contest_id: str, problem_id: str, problem_path: str) -> Option
 
                 test_cases_data.append(TestCase(name=name, input_content=tc_input, output_content=tc_output))
             except Exception as e:
-                print(f"Error loading test case {name} for problem {problem_id}: {e}")
+                logger.error(f"Error loading test case {name} for problem {problem_id}: {e}", exc_info=True)
 
     return Problem(
         id=problem_id,
@@ -139,7 +141,7 @@ def load_server_data():
     global _contests_db
     _contests_db = {}
     if not os.path.exists(CONTESTS_PATH):
-        print(f"Warning: Contests directory not found at {CONTESTS_PATH}")
+        logger.warning(f"Contests directory not found at {CONTESTS_PATH}")
         return
 
     for contest_id in os.listdir(CONTESTS_PATH):
@@ -156,7 +158,7 @@ def load_server_data():
                 with open(index_md_path, "r", encoding='utf-8') as f:
                     description_md = f.read()
             except Exception as e:
-                print(f"Error reading contest description for {contest_id}: {e}")
+                logger.error(f"Error reading contest description for {contest_id}: {e}", exc_info=True)
 
         settings_data_raw = {}
         if os.path.exists(settings_json_path):
@@ -164,9 +166,9 @@ def load_server_data():
                 with open(settings_json_path, "r", encoding='utf-8') as f:
                     settings_data_raw = json.load(f)
             except json.JSONDecodeError:
-                print(f"Error: Invalid JSON in settings for contest {contest_id}.")
+                logger.error(f"Error: Invalid JSON in settings for contest {contest_id}.")
             except Exception as e:
-                print(f"Error reading contest settings for {contest_id}: {e}")
+                logger.error(f"Error reading contest settings for {contest_id}: {e}", exc_info=True)
 
         parsed_settings = _parse_settings_data(settings_data_raw)
 
@@ -194,7 +196,7 @@ def load_server_data():
         setattr(contest_obj, '_full_problems', {p.id: p for p in parsed_problems_in_contest_full})
         _contests_db[contest_id] = contest_obj
 
-    print(f"Loaded {len(_contests_db)} contests.")
+    logger.info(f"Loaded {len(_contests_db)} contests.")
 
 
 def get_all_contests() -> List[ContestMinimal]:

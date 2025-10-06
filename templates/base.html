@@ -7,18 +7,15 @@
 
     <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}">
 
-    <link crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
-          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/theme/material-darker.min.css"
-          rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/display/fullscreen.css"
-          rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/foldgutter.css"
-          rel="stylesheet">
+    <!-- Local Assets -->
+    <link href="{{ url_for('static', path='vendor/bootstrap/css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='vendor/bootstrap-icons/font/bootstrap-icons.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='vendor/codemirror/codemirror.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='vendor/codemirror/theme/material-darker.min.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='vendor/codemirror/addon/display/fullscreen.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', path='vendor/codemirror/addon/fold/foldgutter.css') }}" rel="stylesheet">
 
-    <link href="/static/style.css" rel="stylesheet">
+    <link href="{{ url_for('static', path='style.css') }}" rel="stylesheet">
 
     <script>
         MathJax = {
@@ -33,7 +30,7 @@
             }
         };
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" id="MathJax-script"></script>
+    <script src="{{ url_for('static', path='vendor/mathjax/tex-mml-chtml.js') }}" id="MathJax-script"></script>
 </head>
 <body class="d-flex flex-column h-100">
 <nav class="navbar navbar-expand-md navbar-dark fixed-top bg-dark shadow-sm">
@@ -108,23 +105,20 @@
     {% block content %}{% endblock %}
 </main>
 
-<script crossorigin="anonymous"
-        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
-        src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/codemirror.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/python/python.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/mode/clike/clike.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/edit/matchbrackets.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/edit/closebrackets.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/selection/active-line.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/display/fullscreen.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/comment/comment.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/foldcode.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/foldgutter.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/brace-fold.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/comment-fold.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/indent-fold.min.js"></script>
+<script src="{{ url_for('static', path='vendor/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/codemirror.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/mode/python/python.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/mode/clike/clike.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/edit/matchbrackets.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/edit/closebrackets.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/selection/active-line.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/display/fullscreen.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/comment/comment.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/fold/foldcode.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/fold/foldgutter.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/fold/brace-fold.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/fold/comment-fold.min.js') }}"></script>
+<script src="{{ url_for('static', path='vendor/codemirror/addon/fold/indent-fold.min.js') }}"></script>
 
 {% block extra_js %}
 <script>

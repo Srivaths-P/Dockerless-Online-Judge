@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import shutil
 import signal
@@ -17,6 +18,7 @@ from app.sandbox.common import (
 
 MAX_THREADS = (os.cpu_count() or 2) * 2
 blocking_executor = ThreadPoolExecutor(max_workers=MAX_THREADS)
+logger = logging.getLogger(__name__)
 
 
 class SandboxResult(BaseModel):
@@ -200,7 +202,7 @@ async def run_sandboxed(
             memory_used_kb=mem_kb, compilation_stderr=compilation_stderr
         )
     except Exception as e:
-        traceback.print_exc()
+        logger.error("Sandbox engine critical error", exc_info=True)
         return SandboxResult(status='internal_error', stderr=f"Sandbox engine critical error: {e}")
     finally:
         shutil.rmtree(host_td, ignore_errors=True)

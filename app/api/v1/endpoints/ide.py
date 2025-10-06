@@ -1,3 +1,4 @@
+import logging
 import traceback
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,6 +10,7 @@ from app.schemas.ide import IdeRunRequest, IdeRunResult
 from app.services import ide_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/run", response_model=IdeRunResult)
@@ -29,8 +31,7 @@ async def run_ide_code(
     except HTTPException as e:
         raise e
     except Exception as e:
-        print(f"API Error running IDE code for user {current_user.email}: {e}")
-        traceback.print_exc()
+        logger.error(f"API Error running IDE code for user {current_user.email}: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while running the code."

@@ -1,3 +1,4 @@
+import logging
 import os
 import signal
 import traceback
@@ -14,6 +15,7 @@ from app.services import contest_service
 from app.services import generator_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/reload", status_code=status.HTTP_202_ACCEPTED)
@@ -23,24 +25,22 @@ async def reload_contest_data(
     if 'GUNICORN_PID' in os.environ:
         try:
             master_pid = os.getppid()
-            print(f"ADMIN ACTION: Gunicorn environment detected. Sending SIGHUP to master (PID: {master_pid}).")
+            logger.info(f"ADMIN ACTION: Gunicorn environment detected. Sending SIGHUP to master (PID: {master_pid}).")
             os.kill(master_pid, signal.SIGHUP)
             return {"message": "Graceful worker reload signal sent to Gunicorn master.", "method": "sighup"}
         except Exception as e:
-            print(f"API Error attempting to signal Gunicorn master: {e}")
-            traceback.print_exc()
+            logger.error(f"API Error attempting to signal Gunicorn master: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to signal Gunicorn for reload. Check server logs."
             )
     else:
         try:
-            print("ADMIN ACTION: Non-Gunicorn environment detected. Reloading data in-memory.")
+            logger.info("ADMIN ACTION: Non-Gunicorn environment detected. Reloading data in-memory.")
             contest_service.load_server_data()
             return {"message": "Contest data reloaded directly in memory.", "method": "direct_call"}
         except Exception as e:
-            print(f"API Error attempting to reload data directly: {e}")
-            traceback.print_exc()
+            logger.error(f"API Error attempting to reload data directly: {e}", exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to reload contest data directly. Check server logs."
@@ -101,6 +101,5 @@ async def generate_problem_testcase(
     except HTTPException as e:
         raise e
     except Exception as e:
-        print(f"API Error generating test case for {problem_id}: {type(e).__name__}: {e}")
-        traceback.print_exc()
+        logger.error(f"API Error generating test case for {problem_id}: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to generate test case.")

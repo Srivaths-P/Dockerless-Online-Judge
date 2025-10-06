@@ -1,4 +1,5 @@
 import json
+import logging
 import traceback
 import uuid
 from typing import List, Optional, Dict, Any
@@ -8,7 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.crud.base import CRUDBase
 from app.db.models import Submission
-from app.schemas.submission import SubmissionCreate, SubmissionUpdate, TestCaseResult
+from app.schemas.submission import SubmissionCreate, SubmissionUpdate, TestCaseResult, SubmissionStatus
+
+logger = logging.getLogger(__name__)
 
 
 class CRUDSubmission(CRUDBase[Submission, SubmissionCreate, SubmissionUpdate]):
@@ -20,10 +23,10 @@ class CRUDSubmission(CRUDBase[Submission, SubmissionCreate, SubmissionUpdate]):
             try:
                 uuid.UUID(id_str)
             except ValueError:
-                print(f"CRUD: Invalid UUID string format provided to get: {id_str}")
+                logger.warning(f"CRUD: Invalid UUID string format provided to get: {id_str}")
                 return None
         else:
-            print(f"CRUD: Unexpected ID type for get: {type(id_)}")
+            logger.warning(f"CRUD: Unexpected ID type for get: {type(id_)}")
             return None
 
         return db.query(self.model).filter(self.model.id == id_str).first()
@@ -39,7 +42,7 @@ class CRUDSubmission(CRUDBase[Submission, SubmissionCreate, SubmissionUpdate]):
             language=obj_in.language,
             code=obj_in.code,
             submitter_id=submitter_id,
-            status="PENDING",
+            status=SubmissionStatus.PENDING.value,
             results_json=json.dumps(results_list_for_json)
         )
         db.add(db_obj)
@@ -49,7 +52,7 @@ class CRUDSubmission(CRUDBase[Submission, SubmissionCreate, SubmissionUpdate]):
             db.refresh(db_obj)
             return db_obj
         except Exception as e:
-            traceback.print_exc()
+            logger.error(f"Failed to create submission for owner {submitter_id}", exc_info=True)
             db.rollback()
             raise
 
@@ -100,7 +103,7 @@ class CRUDSubmission(CRUDBase[Submission, SubmissionCreate, SubmissionUpdate]):
             db.commit()
             return db_obj
         except Exception as e:
-            traceback.print_exc()
+            logger.error(f"Failed to update submission results for {db_obj.id}", exc_info=True)
             db.rollback()
             raise
 

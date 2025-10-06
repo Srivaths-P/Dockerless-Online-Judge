@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import shutil
 import tempfile
@@ -19,6 +20,7 @@ from app.services.contest_service import get_problem_by_id
 
 MAX_THREADS = (os.cpu_count() or 2) * 2
 blocking_executor = ThreadPoolExecutor(max_workers=MAX_THREADS)
+logger = logging.getLogger(__name__)
 
 
 async def _judge_test_case(
@@ -207,7 +209,7 @@ class SubmissionProcessingQueue:
             try:
                 await self._process_submission(submission_id, worker_id)
             except Exception as e:
-                traceback.print_exc()
+                logger.error(f"Worker {worker_id} processing failed for submission {submission_id}", exc_info=True)
                 await self._handle_error(submission_id, f"Worker processing failed: {e}")
             self._queue.task_done()
 
@@ -246,7 +248,7 @@ class SubmissionProcessingQueue:
                     res = await _judge_test_case(submission_id=uuid.UUID(submission_id), code=sub.code,
                                                  language=sub.language, problem=problem, test_case=tc)
                 except Exception as e:
-                    traceback.print_exc()
+                    logger.error(f"Executor error during judging of test case {tc.name} for sub {submission_id}", exc_info=True)
                     res = TestCaseResult(test_case_name=tc.name, status=SubmissionStatus.INTERNAL_ERROR,
                                          stderr=f"Executor error: {type(e).__name__}: {e}")
 

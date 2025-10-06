@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 from typing import Any, Dict, Optional
@@ -8,6 +9,8 @@ BWRAP = "/usr/bin/bwrap"
 PYTHON3 = "/usr/bin/python3"
 GCC = "/usr/bin/gcc"
 GPP = "/usr/bin/g++"
+
+logger = logging.getLogger(__name__)
 
 EXECUTION_WRAPPER = """
 import os
@@ -23,6 +26,7 @@ stderr_path = '/workspace/user.stderr'
 res_log_path = '/tmp/res.log'
 
 cpu_limit_sec = int(os.environ['CPU_LIMIT_S'])
+output_file_limit_bytes = 64 * 1024 * 1024 # 64 MB
 
 if os.path.exists(stdin_path):
     stdin_fd = os.open(stdin_path, os.O_RDONLY)
@@ -37,6 +41,7 @@ pid = os.fork()
 if pid == 0:
     try:
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_limit_sec, cpu_limit_sec))
+        resource.setrlimit(resource.RLIMIT_FSIZE, (output_file_limit_bytes, output_file_limit_bytes))
         os.dup2(stdin_fd, sys.stdin.fileno())
         os.dup2(stdout_fd, sys.stdout.fileno())
         os.dup2(stderr_fd, sys.stderr.fileno())
@@ -131,7 +136,7 @@ def _systemd_bwrap_run(
         if res.returncode == 0 and res.stdout.strip():
             systemd_result_str = res.stdout.strip()
     except Exception as e:
-        print(f"Failed to get systemd result for {unit}: {e}")
+        logger.error(f"Failed to get systemd result for {unit}: {e}", exc_info=True)
     subprocess.run(["systemctl", "--user", "reset-failed", f"{unit}.scope"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
     subprocess.run(["systemctl", "--user", "stop", f"{unit}.scope"],

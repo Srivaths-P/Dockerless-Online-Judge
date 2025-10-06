@@ -1,3 +1,4 @@
+import logging
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,6 +10,7 @@ from app.schemas.submission import SubmissionCreate, SubmissionPublic, Submissio
 from app.services import contest_service, submission_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/", response_model=SubmissionInfo, status_code=status.HTTP_202_ACCEPTED)
@@ -33,9 +35,7 @@ async def create_new_submission(
     except HTTPException as e:
         raise e
     except Exception as e:
-        print(f"API Error creating submission: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"API Error creating submission: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to process submission.")
 
 

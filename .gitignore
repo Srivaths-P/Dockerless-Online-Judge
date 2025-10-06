@@ -56,3 +56,5 @@ judge.db-shm
 judge.db-wal
 .vercel
 logs/
+
+static/vendor/

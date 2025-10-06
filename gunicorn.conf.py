@@ -1,7 +1,10 @@
+import logging
 import os
 
 wsgi_app = "app.main:app"
 preload_app = False
+
+logger = logging.getLogger(__name__)
 
 
 def when_ready(server):
@@ -11,7 +14,7 @@ def when_ready(server):
 
 
 def post_worker_init(worker):
-    print(f"Gunicorn worker {worker.pid}: Initializing and loading contest data.")
+    logger.info(f"Gunicorn worker {worker.pid}: Initializing and loading contest data.")
     from app.services.contest_service import load_server_data
     load_server_data()
 

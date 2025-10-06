@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     ALLOWED_EMAIL_DOMAINS: List[str] = Field(default_factory=list)
 
+    IDE_TIME_LIMIT_SEC: int = 1
+    IDE_MEMORY_LIMIT_MB: int = 64
+    IDE_RUN_COOLDOWN_SEC: int = 3
+    DEFAULT_SUBMISSION_COOLDOWN_SEC: int = 10
+    DEFAULT_GENERATOR_COOLDOWN_SEC: int = 10
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
@@ -25,4 +31,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

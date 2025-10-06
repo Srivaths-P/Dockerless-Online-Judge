@@ -1,3 +1,4 @@
+import logging
 import traceback
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any
@@ -5,12 +6,13 @@ from typing import Dict, Any
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.logging_config import log_user_event
 from app.db import models as db_models
 from app.sandbox.executor import run_generator_in_sandbox
 from app.services.contest_service import check_submission
 
-DEFAULT_GENERATOR_COOLDOWN_SEC = 10
+logger = logging.getLogger(__name__)
 
 
 async def generate_sample_testcase(
@@ -19,7 +21,7 @@ async def generate_sample_testcase(
         problem_id: str,
         current_user: db_models.User
 ) -> Dict[str, Any]:
-    print(f"Service: generate_sample_testcase called by user {current_user.email} for problem {problem_id}")
+    logger.info(f"Service: generate_sample_testcase called by user {current_user.email} for problem {problem_id}")
 
     log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="generator_request",
                    details={"contest_id": contest_id, "problem_id": problem_id})
@@ -27,14 +29,14 @@ async def generate_sample_testcase(
     problem = check_submission(contest_id, problem_id)
 
     if not problem.generator_code:
-        print(f"Service: Generator code not found for problem {problem.id}")
+        logger.warning(f"Service: Generator code not found for problem {problem.id}")
         log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="generator_not_available",
                        details={"contest_id": contest_id, "problem_id": problem_id})
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail="Test case generator not available for this problem.")
 
     now = datetime.now(timezone.utc)
-    cooldown_sec = problem.generator_cooldown_sec if problem.generator_cooldown_sec is not None else DEFAULT_GENERATOR_COOLDOWN_SEC
+    cooldown_sec = problem.generator_cooldown_sec if problem.generator_cooldown_sec is not None else settings.DEFAULT_GENERATOR_COOLDOWN_SEC
     cooldown_period = timedelta(seconds=cooldown_sec)
 
     last_gen_at_aware = current_user.last_generation_at
@@ -80,7 +82,6 @@ async def generate_sample_testcase(
     except Exception as e:
         log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="generator_internal_error",
                        details={"contest_id": contest_id, "problem_id": problem_id, "error": str(e)})
-        print(f"Service: Error running generator for {problem_id}: {type(e).__name__}: {e}")
-        traceback.print_exc()
+        logger.error(f"Service: Error running generator for {problem_id}: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail="Failed to run test case generator.") from e

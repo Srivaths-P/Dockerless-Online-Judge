@@ -1,3 +1,4 @@
+import logging
 from typing import Generator
 
 from sqlalchemy import create_engine, event
@@ -14,19 +15,20 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+logger = logging.getLogger(__name__)
 
 
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     try:
-        print("Session.py: Attempting to set PRAGMAs...")
+        logger.info("Attempting to set SQLite PRAGMAs...")
         cursor.execute("PRAGMA journal_mode=WAL;")
         cursor.execute("PRAGMA foreign_keys=ON;")
         cursor.execute("PRAGMA busy_timeout = 30000;")
-        print("Session.py: SQLite PRAGMAs (journal_mode=WAL, foreign_keys=ON, busy_timeout=30000) set.")
+        logger.info("SQLite PRAGMAs (journal_mode=WAL, foreign_keys=ON, busy_timeout=30000) set.")
     except Exception as e:
-        print(f"Session.py: Failed to set SQLite PRAGMAs: {e}")
+        logger.error(f"Failed to set SQLite PRAGMAs: {e}", exc_info=True)
     finally:
         cursor.close()
 
