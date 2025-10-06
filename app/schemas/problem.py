@@ -17,6 +17,7 @@ class ProblemPublic(BaseModel):
     memory_limit_mb: int
     allowed_languages: List[str]
     generator_available: bool
+    public_test_cases: List[TestCase] = []
     submission_cooldown_sec: Optional[int] = None
     generator_cooldown_sec: Optional[int] = None
 
@@ -29,7 +30,8 @@ class Problem(BaseModel):
     memory_limit_mb: int
     allowed_languages: List[str]
 
-    test_cases: List[TestCase] = []
+    public_test_cases: List[TestCase] = []
+    private_test_cases: List[TestCase] = []
     validator_type: str = "diff"
     validator_code: Optional[str] = None
     validator_language: str = "python"

@@ -61,14 +61,16 @@
                 </div>
             </div>
         {% else %}
+            {% if not problem.public_test_cases %}
             <div class="card shadow-sm mb-4">
-                <div class="card-header"><h5 class="mb-0">Test Case Generator</h5></div>
-                <div class="card-body">
+                <div class="card-header"><h5 class="mb-0">Test Cases</h5></div>
+                 <div class="card-body">
                     <div class="alert alert-info mb-0" role="alert">
-                        <i class="bi bi-info-circle me-2"></i> A sample test case generator is not available for this problem.
+                        <i class="bi bi-info-circle me-2"></i> No public test cases or generator are available for this problem.
                     </div>
                 </div>
             </div>
+            {% endif %}
         {% endif %}
 
         <div class="card shadow-sm mb-4">

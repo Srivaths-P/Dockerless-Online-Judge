@@ -15,6 +15,7 @@ if not os.path.exists(TEMPLATES_DIR):
 templates = Jinja2Templates(directory=TEMPLATES_DIR)
 templates.env.globals["get_flashed_messages"] = get_flashed_messages
 templates.env.globals["G"] = {"datetime_class": datetime, "timedelta_class": timedelta}
+templates.env.add_extension('jinja2.ext.do')
 
 
 def to_isoformat(dt: datetime) -> str:

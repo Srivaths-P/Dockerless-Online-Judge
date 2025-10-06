@@ -49,6 +49,29 @@ def _parse_settings_data(settings_data: Dict) -> Dict:
     return parsed_settings
 
 
+def _load_test_cases_from_dir(directory: str, problem_id: str) -> List[TestCase]:
+    if not os.path.isdir(directory):
+        return []
+
+    test_cases = []
+    for item in os.listdir(directory):
+        if item.endswith(".in"):
+            name = item[:-3]
+            in_path = os.path.join(directory, item)
+            out_path = os.path.join(directory, f"{name}.out")
+            tc_input, tc_output = None, None
+            try:
+                with open(in_path, "r", encoding='utf-8') as f_in:
+                    tc_input = f_in.read()
+                if os.path.exists(out_path):
+                    with open(out_path, "r", encoding='utf-8') as f_out:
+                        tc_output = f_out.read()
+                test_cases.append(TestCase(name=name, input_content=tc_input, output_content=tc_output))
+            except Exception as e:
+                logger.error(f"Error loading test case {name} for problem {problem_id}: {e}", exc_info=True)
+    return test_cases
+
+
 def _load_problem(contest_id: str, problem_id: str, problem_path: str) -> Optional[Problem]:
     index_md_path = os.path.join(problem_path, "index.md")
     settings_json_path = os.path.join(problem_path, "settings.json")
@@ -91,29 +114,15 @@ def _load_problem(contest_id: str, problem_id: str, problem_path: str) -> Option
                 if val_code_content:
                     validator_code = val_code_content
 
-    test_cases_data: List[TestCase] = []
-    tests_dir_path = os.path.join(problem_path, "tests")
+    tests_dir = os.path.join(problem_path, "tests")
+    public_tests_dir = os.path.join(tests_dir, "public")
+    private_tests_dir = os.path.join(tests_dir, "private")
 
-    search_path = tests_dir_path if os.path.isdir(tests_dir_path) else problem_path
+    public_test_cases = _load_test_cases_from_dir(public_tests_dir, problem_id)
+    private_test_cases = _load_test_cases_from_dir(private_tests_dir, problem_id)
 
-    for item in os.listdir(search_path):
-        if item.endswith(".in"):
-            name = item[:-3]
-            in_path = os.path.join(search_path, item)
-            out_path = os.path.join(search_path, f"{name}.out")
-
-            tc_input, tc_output = None, None
-            try:
-                with open(in_path, "r", encoding='utf-8') as f_in:
-                    tc_input = f_in.read()
-
-                if os.path.exists(out_path):
-                    with open(out_path, "r", encoding='utf-8') as f_out:
-                        tc_output = f_out.read()
-
-                test_cases_data.append(TestCase(name=name, input_content=tc_input, output_content=tc_output))
-            except Exception as e:
-                logger.error(f"Error loading test case {name} for problem {problem_id}: {e}", exc_info=True)
+    if not os.path.exists(private_tests_dir):
+        private_test_cases.extend(_load_test_cases_from_dir(tests_dir, problem_id))
 
     return Problem(
         id=problem_id,
@@ -131,7 +140,8 @@ def _load_problem(contest_id: str, problem_id: str, problem_path: str) -> Option
         generator_language=generator_lang,
         generator_time_limit_sec=settings_data.get("generator_time_limit_sec"),
         generator_memory_limit_mb=settings_data.get("generator_memory_limit_mb"),
-        test_cases=test_cases_data,
+        public_test_cases=public_test_cases,
+        private_test_cases=private_test_cases,
         submission_cooldown_sec=settings_data.get("submission_cooldown_sec"),
         generator_cooldown_sec=settings_data.get("generator_cooldown_sec")
     )

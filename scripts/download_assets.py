@@ -2,10 +2,17 @@ import os
 import requests
 from pathlib import Path
 import time
+import shutil
+import zipfile
+import io
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 STATIC_DIR = PROJECT_ROOT / "static"
 VENDOR_DIR = STATIC_DIR / "vendor"
+
+# URL for the complete MathJax v3 distribution zip
+MATHJAX_URL = "https://github.com/mathjax/MathJax/archive/refs/tags/3.2.2.zip"
+MATHJAX_DIR_NAME = "MathJax-3.2.2"  # The directory name inside the zip
 
 ASSETS = [
     {
@@ -96,10 +103,6 @@ ASSETS = [
         "url": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.15/addon/fold/indent-fold.min.js",
         "path": "codemirror/addon/fold/indent-fold.min.js"
     },
-    {
-        "url": "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js",
-        "path": "mathjax/tex-mml-chtml.js"
-    }
 ]
 
 
@@ -110,17 +113,22 @@ def download_assets():
         VENDOR_DIR.mkdir(parents=True)
 
     session = requests.Session()
-    headers = {'User-Agent': 'Mozilla/5.0'}
+    headers = {'User-Agent': 'DOJ Asset Downloader'}
 
+    # --- Standard Asset Download ---
     for asset in ASSETS:
         url = asset['url']
         local_path = VENDOR_DIR / asset['path']
+
+        if local_path.exists():
+            print(f"Skipping {local_path} (already exists).")
+            continue
 
         local_path.parent.mkdir(parents=True, exist_ok=True)
 
         print(f"Downloading {url}...")
         try:
-            response = session.get(url, headers=headers, timeout=15)
+            response = session.get(url, headers=headers, timeout=30)
             response.raise_for_status()
 
             with open(local_path, 'wb') as f:
@@ -129,10 +137,51 @@ def download_assets():
             print(f" -> Saved to {local_path}")
         except requests.exceptions.RequestException as e:
             print(f" [ERROR] Failed to download {url}: {e}")
-
         time.sleep(0.1)
 
-    print("\n✅ All assets downloaded successfully.")
+    # --- Special Handling for MathJax ---
+    mathjax_target_dir = VENDOR_DIR / "mathjax"
+    if mathjax_target_dir.exists() and any(mathjax_target_dir.iterdir()):
+        print(f"\nSkipping MathJax (directory {mathjax_target_dir} already exists and is not empty).")
+    else:
+        print(f"\n--- Handling MathJax Distribution ---")
+        print(f"Downloading {MATHJAX_URL}...")
+        try:
+            response = session.get(MATHJAX_URL, headers=headers, timeout=120, stream=True)
+            response.raise_for_status()
+
+            zip_file = zipfile.ZipFile(io.BytesIO(response.content))
+
+            print("Extracting MathJax...")
+            # Clean up target directory before extraction
+            if mathjax_target_dir.exists():
+                shutil.rmtree(mathjax_target_dir)
+
+            # We only need the 'es5' directory from the distribution
+            source_es5_path = f"{MATHJAX_DIR_NAME}/es5"
+            for member in zip_file.infolist():
+                if member.filename.startswith(source_es5_path) and not member.is_dir():
+                    # Calculate the destination path
+                    relative_path = os.path.relpath(member.filename, source_es5_path)
+                    target_path = mathjax_target_dir / relative_path
+
+                    # Create parent directories if they don't exist
+                    target_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    # Extract the file
+                    with zip_file.open(member) as source, open(target_path, "wb") as target:
+                        shutil.copyfileobj(source, target)
+
+            print(f" -> MathJax successfully extracted to {mathjax_target_dir}")
+
+        except requests.exceptions.RequestException as e:
+            print(f" [ERROR] Failed to download MathJax: {e}")
+        except zipfile.BadZipFile:
+            print(f" [ERROR] Failed to extract MathJax: Downloaded file is not a valid zip archive.")
+        except Exception as e:
+            print(f" [ERROR] An unexpected error occurred while handling MathJax: {e}")
+
+    print("\n✅ Asset download process complete.")
 
 
 if __name__ == "__main__":

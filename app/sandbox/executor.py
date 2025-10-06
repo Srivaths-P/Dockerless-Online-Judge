@@ -127,9 +127,11 @@ async def _judge_test_case(
                                                                          test_exp_path)
             status = SubmissionStatus.ACCEPTED if diff_code == 0 else SubmissionStatus.WRONG_ANSWER
 
+        is_public = any(ptc.name == test_case.name for ptc in problem.public_test_cases)
+
         return TestCaseResult(
             test_case_name=test_case.name, status=status,
-            stdout=display_stdout if status == SubmissionStatus.WRONG_ANSWER else None,
+            stdout=None if not is_public else display_stdout,
             stderr=user_run_result.stderr,
             execution_time_ms=user_run_result.execution_time_ms, memory_used_kb=user_run_result.memory_used_kb
         )
@@ -241,14 +243,16 @@ class SubmissionProcessingQueue:
             final_results: List[TestCaseResult] = []
             overall_status = SubmissionStatus.ACCEPTED
 
-            sorted_test_cases = sorted(problem.test_cases, key=lambda tc: tc.name)
+            all_test_cases = problem.public_test_cases + problem.private_test_cases
+            sorted_test_cases = sorted(all_test_cases, key=lambda tc: tc.name)
 
             for tc in sorted_test_cases:
                 try:
                     res = await _judge_test_case(submission_id=uuid.UUID(submission_id), code=sub.code,
                                                  language=sub.language, problem=problem, test_case=tc)
                 except Exception as e:
-                    logger.error(f"Executor error during judging of test case {tc.name} for sub {submission_id}", exc_info=True)
+                    logger.error(f"Executor error during judging of test case {tc.name} for sub {submission_id}",
+                                 exc_info=True)
                     res = TestCaseResult(test_case_name=tc.name, status=SubmissionStatus.INTERNAL_ERROR,
                                          stderr=f"Executor error: {type(e).__name__}: {e}")
 

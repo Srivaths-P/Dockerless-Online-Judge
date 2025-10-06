@@ -4,6 +4,8 @@ from typing import Optional, List
 
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.problem import TestCase
+
 
 class SubmissionStatus(str, Enum):
     PENDING = "PENDING"
@@ -49,6 +51,7 @@ class SubmissionPublicBase(SubmissionBase):
     submitted_at: datetime
     results: List[TestCaseResult] = []
     user_email: Optional[str] = None
+    public_test_cases: List[TestCase] = []
 
     model_config = ConfigDict(from_attributes=True)
 

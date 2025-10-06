@@ -1,21 +1,24 @@
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import List
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.logging_config import log_user_event
 from app.crud import crud_submission
 from app.db import models as db_models
 from app.sandbox.executor import submission_processing_queue
+from app.schemas.problem import TestCase
 from app.schemas.submission import (
     SubmissionCreate, SubmissionStatus, SubmissionInfo, TestCaseResult, SubmissionPublic
 )
-from app.services.contest_service import check_submission
+from app.services.contest_service import check_submission, get_problem_by_id
 
-DEFAULT_SUBMISSION_COOLDOWN_SEC = 10
+logger = logging.getLogger(__name__)
 
 
 async def create_submission(
@@ -23,7 +26,7 @@ async def create_submission(
         submission_data: SubmissionCreate,
         current_user: db_models.User
 ) -> SubmissionInfo:
-    print(f"Service: create_submission called by user {current_user.email} for problem {submission_data.problem_id}")
+    logger.info(f"Service: create_submission called by user {current_user.email} for problem {submission_data.problem_id}")
 
     problem = check_submission(
         contest_id=submission_data.contest_id,
@@ -31,7 +34,7 @@ async def create_submission(
     )
 
     if not problem:
-        print(f"Service: Problem not found: {submission_data.contest_id}/{submission_data.problem_id}")
+        logger.warning(f"Service: Problem not found: {submission_data.contest_id}/{submission_data.problem_id}")
         log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_create_failed",
                        details={"contest_id": submission_data.contest_id, "problem_id": submission_data.problem_id,
                                 "language": submission_data.language, "detail": "Problem not found",
@@ -39,7 +42,7 @@ async def create_submission(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
 
     if submission_data.language not in problem.allowed_languages:
-        print(f"Service: Language '{submission_data.language}' not allowed for problem {problem.id}")
+        logger.warning(f"Service: Language '{submission_data.language}' not allowed for problem {problem.id}")
         log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_create_failed",
                        details={"contest_id": submission_data.contest_id, "problem_id": submission_data.problem_id,
                                 "language": submission_data.language,
@@ -49,7 +52,7 @@ async def create_submission(
                             detail=f"Language {submission_data.language} not allowed for this problem.")
 
     now = datetime.now(timezone.utc)
-    cooldown_sec = problem.submission_cooldown_sec if problem.submission_cooldown_sec is not None else DEFAULT_SUBMISSION_COOLDOWN_SEC
+    cooldown_sec = problem.submission_cooldown_sec if problem.submission_cooldown_sec is not None else settings.DEFAULT_SUBMISSION_COOLDOWN_SEC
     cooldown_period = timedelta(seconds=cooldown_sec)
 
     last_sub_at_aware = current_user.last_submission_at
@@ -79,12 +82,11 @@ async def create_submission(
         db.refresh(db_submission)
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         db.rollback()
         log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_create_error",
                        details={"contest_id": submission_data.contest_id, "problem_id": submission_data.problem_id,
                                 "language": submission_data.language, "error": str(e)})
+        logger.error("Failed to save submission record", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                             detail=f"Failed to save submission record.") from e
 
@@ -92,7 +94,7 @@ async def create_submission(
     log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_created_enqueued",
                    details={"contest_id": submission_data.contest_id, "problem_id": submission_data.problem_id,
                             "language": submission_data.language, "submission_id": submission_id_str})
-    print(f"Service: Submission {submission_id_str[:8]} enqueued for processing.")
+    logger.info(f"Service: Submission {submission_id_str[:8]} enqueued for processing.")
 
     submitter = db_submission.submitter
     user_email = submitter.email if submitter else current_user.email
@@ -118,11 +120,14 @@ def get_submission_by_id(
     )
 
     if not db_submission:
-        print(f"Service: Submission {submission_id} not found in DB or does not belong to user {current_user.id}.")
+        logger.warning(f"Service: Submission {submission_id} not found in DB or does not belong to user {current_user.id}.")
         log_user_event(user_id=current_user.id, user_email=current_user.email, event_type="submission_view_failed",
                        details={"submission_id": submission_id, "detail": "Not found or authorized",
                                 "status_code": status.HTTP_404_NOT_FOUND})
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found or not authorized.")
+
+    problem = get_problem_by_id(db_submission.contest_id, db_submission.problem_id)
+    public_test_cases: List[TestCase] = problem.public_test_cases if problem else []
 
     parsed_results: List[TestCaseResult] = []
     if db_submission.results_json:
@@ -135,7 +140,7 @@ def get_submission_by_id(
                         try:
                             parsed_results.append(TestCaseResult(**res_dict))
                         except Exception as parse_e:
-                            print(
+                            logger.warning(
                                 f"Warning: Failed to parse TestCaseResult item for submission {db_submission.id}: {parse_e}")
                             parsed_results.append(TestCaseResult(
                                 test_case_name="Result Parsing Error",
@@ -143,7 +148,7 @@ def get_submission_by_id(
                                 stderr=f"Failed to parse result item: {parse_e}"
                             ))
                     else:
-                        print(
+                        logger.warning(
                             f"Warning: Unexpected item type in results_json list for submission {db_submission.id}: {type(res_dict)}")
                         parsed_results.append(TestCaseResult(
                             test_case_name="Result Parsing Error",
@@ -151,18 +156,18 @@ def get_submission_by_id(
                             stderr="Unexpected item type in results list."
                         ))
             else:
-                print(
+                logger.warning(
                     f"Warning: Service: results_json for submission {db_submission.id} is not a list: {type(results_list_of_dicts)}")
                 parsed_results = [TestCaseResult(test_case_name="Result Parsing",
                                                  status=SubmissionStatus.INTERNAL_ERROR,
                                                  stderr="Invalid result format stored (not a list).")]
         except json.JSONDecodeError:
-            print(f"Error decoding results_json for submission {db_submission.id}")
+            logger.error(f"Error decoding results_json for submission {db_submission.id}", exc_info=True)
             parsed_results = [TestCaseResult(test_case_name="Result Parsing",
                                              status=SubmissionStatus.INTERNAL_ERROR,
                                              stderr="Failed to parse results JSON.")]
         except Exception as e:
-            print(f"Error processing results_json for submission {db_submission.id}: {e}")
+            logger.error(f"Error processing results_json for submission {db_submission.id}: {e}", exc_info=True)
             parsed_results = [TestCaseResult(test_case_name="Result Processing",
                                              status=SubmissionStatus.INTERNAL_ERROR,
                                              stderr=f"Failed to process results: {e}")]
@@ -170,8 +175,8 @@ def get_submission_by_id(
     try:
         status_enum = SubmissionStatus(db_submission.status)
     except ValueError:
-        print(
-            f"Warning: Service: Invalid status value '{db_submission.status}' in DB for submission {db_submission.id}. Defaulting to INTERNAL_ERROR.")
+        logger.warning(
+            f"Service: Invalid status value '{db_submission.status}' in DB for submission {db_submission.id}. Defaulting to INTERNAL_ERROR.")
         status_enum = SubmissionStatus.INTERNAL_ERROR
 
     submitter = db_submission.submitter
@@ -187,7 +192,8 @@ def get_submission_by_id(
         status=status_enum,
         results=parsed_results,
         submitted_at=db_submission.submitted_at,
-        user_email=user_email
+        user_email=user_email,
+        public_test_cases=public_test_cases
     )
 
 

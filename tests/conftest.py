@@ -28,7 +28,7 @@ def event_loop() -> Generator:
 
 
 @pytest.fixture
-def db() -> Generator[Session, None, None]
+def db() -> Generator[Session, None, None]:
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     try:
