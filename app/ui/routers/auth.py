@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from starlette.status import HTTP_303_SEE_OTHER
 
 from app.core.config import settings
-from app.core.logging_config import log_user_event
+from app.core.logging_config import log_user_event, log_audit_event
 from app.core.security import create_access_token
 from app.crud import crud_user
 from app.db import models as db_models
@@ -37,6 +37,9 @@ async def handle_login(
         log_user_event(None, email, "login_failed", {"reason": "Incorrect credentials or inactive account"})
         flash(request, "Incorrect email or password, or inactive account.", "danger")
         return RedirectResponse(url=request.url_for("ui_login_form"), status_code=HTTP_303_SEE_OTHER)
+
+    ip_address = request.client.host if request.client else "unknown"
+    log_audit_event(username=user.email, ip_address=ip_address)
 
     log_user_event(user.id, user.email, "user_login_password")
     access_token = create_access_token(data={"sub": user.email})

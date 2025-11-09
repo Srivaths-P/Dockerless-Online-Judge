@@ -2,6 +2,7 @@ import logging
 import os
 import traceback
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -16,6 +17,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from app.core.templating import templates
 from app.api.v1.api import api_router as api_v1_router
 from app.core.config import settings
+from app.core.logging_config import setup_log_queue_handler
 from app.db.session import get_db
 from app.sandbox.executor import submission_processing_queue
 from app.services import contest_service
@@ -25,28 +27,31 @@ from app.ui.routers import contests as ui_contests_router
 from app.ui.routers import submissions as ui_submissions_router
 from app.ui.routers import ide as ui_ide_router
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    log_queue, log_listener = setup_log_queue_handler()
+    log_listener.start()
+    logger.info("Application startup: Asynchronous log listener started.")
+
     logger.info("Application startup sequence initiated...")
 
     if 'GUNICORN_PID' not in os.environ:
         try:
             logger.info("ADMIN ACTION: Non-Gunicorn environment detected. Reloading data in-memory.")
             contest_service.load_server_data()
-        except Exception as e:
-            logger.error(f"Error attempting to reload data directly: {e}", exc_info=True)
+        except Exception:
+            logger.error("Error attempting to reload data directly.", exc_info=True)
 
     logger.info("Starting submission queue workers...")
 
     try:
         await submission_processing_queue.start_workers()
         logger.info("Submission queue workers started.")
-    except RuntimeError as e:
-        logger.error(f"Failed to start submission queue workers: {e}", exc_info=True)
+    except RuntimeError:
+        logger.error("Failed to start submission queue workers.", exc_info=True)
 
     try:
         with next(get_db()) as db:
@@ -60,11 +65,11 @@ async def lifespan(app: FastAPI):
 
     logger.info("Application shutdown sequence initiated...")
     logger.info("Stopping submission queue workers...")
-
     await submission_processing_queue.stop_workers()
-
     logger.info("Submission queue workers stopped.")
-    logger.info("Application shutdown complete.")
+
+    logger.info("Application shutdown: Stopping log listener.")
+    log_listener.stop()
 
 
 app = FastAPI(
@@ -119,8 +124,8 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
                 {"current_user": current_user, "detail": exc.detail},
                 status_code=status.HTTP_404_NOT_FOUND
             )
-        except Exception as template_error:
-            logger.error(f"Error rendering custom 404 page: {template_error}", exc_info=True)
+        except Exception:
+            logger.error("Error rendering custom 404 page.", exc_info=True)
             return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     elif exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:

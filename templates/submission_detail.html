@@ -126,13 +126,14 @@
                                     <pre class="bg-body-secondary text-white border-0 p-2 rounded small overflow-auto text-wrap"><code>{{ public_tc.input_content or '(No Input)' }}</code></pre>
 
                                     <p class="mb-1 small mt-3"><strong>Expected Output:</strong></p>
-                                    <pre class="bg-body-secondary text-white border-0 p-2 rounded small overflow-auto text-wrap"><code>{{ public_tc.output_content or '(No Output)' }}</code></pre>
+                                    <pre class="bg-body-secondary text-white border-0 p-2 rounded small overflow-auto text-wrap"><code>{{ public_tc.output_content or '(No Output or Multiple Solutions)' }}</code></pre>
 
                                     <p class="mb-1 small mt-3"><strong>Your Program Output:</strong></p>
                                     <pre class="bg-dark text-white border p-2 rounded small overflow-auto text-wrap"><code>{{ result.stdout or '(No Output)' }}</code></pre>
 
                                     {% if result.stderr %}
-                                        <p class="mb-1 small mt-3 text-danger"><strong>Standard Error:</strong></p>
+                                        <p class="mb-1 small mt-3 text-danger"><
+                                            >Standard Error:</strong></p>
                                         <pre class="bg-dark text-danger border p-2 rounded small overflow-auto text-wrap"><code>{{ result.stderr }}</code></pre>
                                     {% endif %}
                                 {% endif %}
