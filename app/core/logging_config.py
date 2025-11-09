@@ -13,7 +13,7 @@ audit_logger.setLevel(logging.INFO)
 audit_logger.propagate = False
 
 startup_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-APP_LOG_FILENAME = f"app_{startup_timestamp}.log"
+APP_LOG_FILENAME = f"activity_{startup_timestamp}.log"
 
 audit_handler = logging.handlers.RotatingFileHandler(
     os.path.join(LOG_DIR, "audit.log"), maxBytes=10 * 1024 * 1024, backupCount=5
