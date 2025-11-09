@@ -27,7 +27,7 @@ async def reload_contest_data(
             master_pid = os.getppid()
             logger.info(f"ADMIN ACTION: Gunicorn environment detected. Sending SIGHUP to master (PID: {master_pid}).")
             os.kill(master_pid, signal.SIGHUP)
-            return {"message": "Graceful worker reload signal sent to Gunicorn master.\n", "method": "sighup"}
+            return {"message": "Graceful worker reload signal sent to Gunicorn master.", "method": "sighup"}
         except Exception as e:
             logger.error(f"API Error attempting to signal Gunicorn master: {e}", exc_info=True)
             raise HTTPException(
@@ -38,7 +38,7 @@ async def reload_contest_data(
         try:
             logger.info("ADMIN ACTION: Non-Gunicorn environment detected. Reloading data in-memory.")
             contest_service.load_server_data()
-            return {"message": "Contest data reloaded directly in memory.\n", "method": "direct_call"}
+            return {"message": "Contest data reloaded directly in memory.", "method": "direct_call"}
         except Exception as e:
             logger.error(f"API Error attempting to reload data directly: {e}", exc_info=True)
             raise HTTPException(
